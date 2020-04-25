@@ -1,0 +1,22 @@
+---
+bibliography: /Users/mdozmorov/Documents/Work/VCU_grants/0_Dozmorov/Sections/sections.bib
+csl: /Users/mdozmorov/Documents/Work/VCU_grants/0_Dozmorov/Sections/styles.ref/genomebiology.csl
+output:
+  word_document:
+  reference_docx: /Users/mdozmorov/Documents/Work/VCU_grants/0_Dozmorov/Sections/styles.doc/NIH_grant_style.docx
+html_document: default
+---
+
+# MethylEpic array
+
+The Infinium Human Methylation 850 BeadArrays profiles 853,307 CpG methylation sites (850K) and contains 91.1% of the 450K sites (omits identified CpG snps), but adds 333,265 CpGs located in enhancer regions identified by the ENCODE and FANTOM5 projects [@Pidsley:2016aa]. When correlated to RNA transcripts, 74.4% of CpGs correspond to coding messenger RNA genes, 0.85% are associated to noncoding RNAs (miRNAs and long noncoding RNAs) and 24.6% sites do not possess an associated transcript. Analysis of genomic distribution shows 30.9% of the sites are in CpG islands, 23% in CpG shores (sequences 2 kb upstream and downstream from CpG island), 9.7% in CpG shelves (sequences 2 kb upstream and downstream from shore regions) and 36.3% are located outside these regions (‘open sea’). Following a functional classification, 41% of the CpGs are located in proximal promoters (CpG sites located within 200 bp or 1500 bp upstream of transcription start sites, exon 1 and in 5′UTRs), 3.2% correspond to 3′UTRs, 30.9% to gene bodies and 24.6% to intergenic regions. This technique is particularly well-suited for genome-wide profiling with respect to throughput, cost, resolution, and accuracy. Previous studies showed that there is a high correlation (R= > 0.9) between results of genome-wide methylation assays such as the Infinium methylation assay and bisulfite pyrosequencing [@Bibikova:2011aa; @Pidsley:2016aa].
+
+# Methylation data analysis
+
+Genomic DNA will be extracted from XXX using the DNeasy Blood & Tissue Kit (Qiagen). Genomic DNA from each sample will be treated by bisulfite conversion with the EZ DNA Methylation Kit (Zymo Research Corporation) as described. MethylationEPIC beadarray shares the Infinium HD chemistry Assay (Illumina Inc.) with HumanMethylation450 beadchip [@Pidsley:2016aa]. Thus, after enzymatic fragmentation, the DNA will be hybridized to the BeadChips and chips will be scanned with an Illumina HiScanSQ system that employs a two-color laser fluorescent scanner. The intensities of the images will be extracted using Genome Studio (2011.1) Methylation Module (v1.8). The scanned arrays will be processed using the `minfi` Bioconductor package in the R programming environment to obtain the $\beta$ values for each beadtype, where $\beta_{ij}$ represents the proportion methylated for the $i^{th}$ beadtype on the $j^{th}$ array, which ranges from 0 (unmethylated) to 1 (completely methylated). Quality of each array will be assessed by examining density plots of the  values, bean plots of the $\beta$ values, and $\beta$ values for various control beads. Like the HumanMethylation450K array, the MethylationEPIC array includes two different assays, the Infinium Type I and Type II designs. Therefore subset within array normalization (SWAN [@Maksimovic:2012aa]) will be performed to reduce the technical variability between the Type I and II assay designs. Because the expression value, $\beta$, reported for each CpG site represents "proportion methylated" which is constrained on the [0, 1] interval, we will transform the expression values using the logit transformation, $M=log(\beta/(1-\beta))$, to promote normality prior to analysis [@Dedeurwaerder:2011aa]. Then for each CpG site, patient groups (P vs. NP) will be compared using a moderated t-test and the `limma` Bioconductor package [@Smyth:2004aa; @Ritchie:2015aa] and the resulting p-values will be used in estimating the FDR using Benjamini and Hochberg’s FDR method [@benjamini1995controlling]. CpG sites having an FDR<0.05 will be considered significant. 
+
+# Methylation power analysis
+
+The scanned arrays were processed using Illumina's GenomeStudio Methylation Analysis Module to obtain the $\beta$ values for each probe. Using the `ssize.fdr` package  in the R programming environment, we estimated the required sample size to detect an $|\beta| \ge 0.20$ for all possible pairwise contrasts between the groups from an ANOVA model, which has been described as a detectable threshold, for proportions of null CpG sites $\pi_0$ = 0.995 at an FDR of 0.05 and power at 90%. The required sample size is 30 subjects per group (60 subjects total). 
+
+# References

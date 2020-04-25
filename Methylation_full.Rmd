@@ -1,0 +1,545 @@
+---
+title: "Methylation analysis of Illumina 850K EPIC arrays"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    # theme: united
+    theme: cerulean
+    # number_sections: true
+date: "`r Sys.Date()`"
+author: "Mikhail Dozmorov"
+---
+
+```{r setup, echo=FALSE, message=FALSE, warning=FALSE}
+# Set up the environment
+library(knitr)
+opts_chunk$set(cache.path='cache/', fig.path='img/', cache=F, tidy=T, fig.keep='high', echo=F, dpi=100, warnings=F, message=F, comment=NA, warning=F, results='as.is') #out.width=700, 
+library(pander)
+panderOptions('table.split.table', Inf)
+set.seed(1)
+library(dplyr)
+options(stringsAsFactors = FALSE)
+```
+
+```{r libraries, include=FALSE}
+library(RnBeads)
+library(ggplot2)
+library(ggrepel)
+library(sva)
+library(annotables)
+library(pheatmap)
+library(DT)
+library(MDgenomerunner)
+library(openxlsx)
+library(IlluminaHumanMethylationEPICanno.ilm10b2.hg19)
+library(enrichR)
+# A function to pull out p-value of LM. https://stackoverflow.com/questions/5587676/pull-out-p-values-and-r-squared-from-a-linear-regression
+lmp <- function (modelobject) {
+  if (class(modelobject) != "lm") stop("Not an object of class 'lm' ")
+  f <- summary(modelobject)$fstatistic
+  p <- pf(f[1],f[2],f[3],lower.tail=F)
+  attributes(p) <- NULL
+  return(p)
+}
+```
+
+## Settings
+
+```{r settings}
+pval.cutoff = 0.01
+adjust.method = "none"
+adj.p.cutoff = 0.1
+num.to.plot = 50
+rerun <- FALSE
+filter_by_genes_present <- TRUE
+```
+
+```{r eval = FALSE}
+# Attempt to use minfi import
+sample.annotation <- "/path/to/Annotations.csv"
+targets <- read.csv(sample.annotation)
+colnames(targets) <- c("Index", "Sample.ID", "Array", "Slide", "Basename")
+
+idat.dir <- "/path/to/idats"
+setwd(idat.dir)
+RGset <- read.metharray(targets$Basename)
+```
+
+
+```{r cache = F}
+fileName <- "data/preprocessed_data.Rdata"
+
+if (rerun) { # Load the data
+  report.dir <- file.path("data", "report")
+  unlink(report.dir, recursive = TRUE)
+  rnb.initialize.reports(report.dir)
+  logger.start(fname=NA)
+  # Enable parallelization
+  parallel.isEnabled()
+  num.cores <- 3
+  parallel.setup(num.cores)
+  
+  idat.dir <- "/path/to/idats"
+  sample.annotation <- "/path/to/Annotations.csv"
+  data.source <- c(idat.dir, sample.annotation)
+  
+  result <- rnb.run.import(data.source=data.source, data.type="idat.dir", dir.reports=report.dir)
+  rnb.set <- result$rnb.set
+  # rnb.set@annotation = c(array = "IlluminaHumanMethylationEPIC", annotation = "IlluminaHumanMethylationEPICanno.ilm10b2.hg19")
+  
+  nrow(meth(rnb.set)) # the number of sites in the unfiltered object
+  # 867926
+  
+  # Remove probes outside of CpG context
+  # rnb.set.filtered <- rnb.execute.context.removal(rnb.set)$dataset
+  # nrow(meth(rnb.set.filtered)) # the number of CpG sites in the unfiltered object
+  
+  # SNP filtering allowing no SNPs in the probe sequence
+  rnb.set.filtered <-rnb.execute.snp.removal(rnb.set, snp="any")$dataset
+  # the number of CpG sites in the unfiltered object that do not contain a SNP
+  nrow(meth(rnb.set.filtered))
+  # 728110
+  
+  # Remove CpGs on sex chromosomes
+  rnb.set.filtered <- rnb.execute.sex.removal(rnb.set.filtered)$dataset
+  nrow(meth(rnb.set.filtered))
+  # 709872
+  
+  # Remove probes and samples based on a greedy approach
+  # rnb.set.filtered <- rnb.execute.greedycut(rnb.set.filtered)$dataset
+  # nrow(meth(rnb.set.filtered))
+  
+  # Remove probes containing NA for beta values
+  rnb.set.filtered <- rnb.execute.na.removal(rnb.set.filtered, 0.25)$dataset
+  nrow(meth(rnb.set.filtered))
+  # 708622
+  
+  # Remove probes for which the beta values have low standard deviation
+  rnb.set.filtered <- rnb.execute.variability.removal(rnb.set.filtered, 0.005)$dataset
+  nrow(meth(rnb.set.filtered))
+  # 708587
+  
+  # Normalization
+  rnb.set.norm <- rnb.execute.normalization(rnb.set.filtered, method="bmiq", bgcorr.method="none")
+  # save.rnb.set(rnb.set.filtered, path = "data/RNBsets")
+  # save.rnb.set(rnb.set.norm, path = "data/RNBsets/")
+  dim(meth(rnb.set.norm))
+  
+  rnb.set.norm.df <- meth(rnb.set.norm) # Make a data frame of cleaned, normalized beta values
+  colnames(rnb.set.norm.df) <- paste0(rnb.set.norm@pheno$Patient, "_", rnb.set.norm@pheno$Visit, "_", rnb.set.norm@pheno$Group) # Attach column
+  rownames(rnb.set.norm.df) <- rownames(rnb.set.norm@sites) # and rownames
+  
+  # Saving methylation data
+  # write.csv(rnb.set.norm.df, "data/rnb_set_norm_df.csv")
+  # Saving sample annotations
+  # write.csv(pheno(rnb.set.norm), "data/sample_annotation.csv")
+  
+  # Prepate sample annotations for further processing
+  sample_annotation <- pheno(rnb.set.norm)
+  sample_annotation <- data.frame(lapply(sample_annotation, as.character), stringsAsFactors = FALSE) # Convert to character
+  colnames(sample_annotation) <- make.names(colnames(sample_annotation))
+  colnames(sample_annotation)
+  sapply(sample_annotation, class)
+  # Fix annotations
+  # Add sample ID matching colnames of the methylation dataset
+  sample_annotation$Study.ID <- paste0(rnb.set.norm@pheno$Patient, "_", rnb.set.norm@pheno$Visit, "_", rnb.set.norm@pheno$Group) # Attach column
+  # Sentrix_Barcode got rounded, extract it back from the barcode labes
+  sample_annotation$Sentrix.Barcode <- sapply(sample_annotation$barcode, function(x) strsplit(x, "_")[[1]][1]) 
+  # Replace non-3 visit to 3 - they all should be 3 month
+  sample_annotation$Visit[sample_annotation$Visit == 2 ] <- 3
+  
+  unlink("Samples_QC_report.html")
+  DataExplorer::GenerateReport(sample_annotation, output_file = "Samples_QC_report.html")
+
+  # # Correct for batch effect
+  # batch <- sample_annotation$Sentrix_ID
+  # mod <- model.matrix(~ factor(Type) + factor(Injury) + factor(Donor) + factor(Predicted.Gender), data = sample_annotation)
+  # combat_edata <- ComBat(rnb.set.norm.df, batch = batch, mod = mod, par.prior = TRUE, prior.plots = FALSE)
+  # Convert betas to M-values
+  # combat_edata[ combat_edata >= 1 ] <- 0.9999999999999999 # Set large outliers to maximum of (0, 1) range
+  # combat_edata[ combat_edata <= 0 ] <- 0.0000000000000001 # Set small outliers to minimum of (0, 1) range
+  rnb.set.norm.df[ rnb.set.norm.df >= 1 ] <- 0.9999999999999999 # Set large outliers to maximum of (0, 1) range
+  rnb.set.norm.df[ rnb.set.norm.df <= 0 ] <- 0.0000000000000001 # Set small outliers to minimum of (0, 1) range
+  M <- apply(rnb.set.norm.df, 2, function(x){log2(x / (1 - x))})
+   
+  # Read in 450K annotation
+  annot.cg <- IlluminaHumanMethylationEPICanno.ilm10b2.hg19@data$Other
+  annot.cg$ID <- rownames(annot.cg)
+  # Gene annotations
+  grch38.slim <- grch38[, c("symbol", "description")]
+  grch38.slim <- unique(grch38.slim) # Get rid of duplicated rows
+  grch38.slim$description <- gsub(" \\[.+?\\]", "" , grch38.slim$description)
+
+  # Save RData
+  save(list = c("rnb.set.norm.df", "M", "sample_annotation", "annot.cg", "grch38.slim"), file = fileName)
+} else {
+  load(file = fileName)
+}
+```
+
+# Methods
+
+Methylation data analysis was performed in R v.3.4.0/Bioconductor v.3.5 environment. Probe intensity data (IDAT) files were processed using the `RnBead` package v.1.8.0. Nonspecific, polymorphic, chromosome X and Y probes, and low variability (<0.5%) probes were removed based on best practices recommendations [@Chen:2013ab; @Pidsley:2016aa]. Method `bimq` was used for data normalization. Background correction was performed with method `none`. Differential methylation analysis between test vs control was performed by the `limma` R package v.3.28.21 from a matrix of M-values, and t-statistics and associated p-values for each CpG site were obtained. Batch variables, such as age, race, gender and array ID, were included in the model. Additionally, we accounted for the telomere length differences. Probe annotations including CpG associated genes were imported from the `IlluminaHumanMethylation450k.db` package v.2.0.9. Magnitude of the differentially methylated (Dme) CpG sites between groups were expressed in log fold changes calculated by considering log2 values of absolute differences between M-values and FDR<10% were used for downstream biological data-analysis. Methylation profiles of comparison-specific top `r num.to.plot` differentially methylated CpG sites were clustered using "euclidean" distance and "single" clustering metric. CpG site-specific profiles (rows) were centered and scaled before clustering. 
+
+
+# Telomere differences
+
+```{r}
+# Load telomere data. With manually added Study.ID
+telomere <- read.xlsx("data/Telomere length data 2017_MD.xlsx")
+all.equal(sort(sample_annotation$Study.ID), sort(telomere$Study.ID))
+# Add to sample annotation
+sample_annotation <- data.frame(sample_annotation, telomere = telomere$`T/S`[match(sample_annotation$Study.ID, telomere$Study.ID)])
+```
+
+```{r}
+visit <- unique(sample_annotation$Visit)
+group <- unique(sample_annotation$Group)
+telomere.pval <- matrix(ncol = length(visit), nrow = length(group))
+for (v in 1:length(visit)) {
+  for (g in 1:length(group)) {
+    telomere.test <- t.test(sample_annotation$telomere[ sample_annotation$Visit == visit[v] & sample_annotation$Group == group[g]], sample_annotation$telomere[ sample_annotation$Visit == visit[v] & sample_annotation$Group == group[g]])
+    telomere.pval[v, g] <- telomere.test$statistic
+  }
+}
+telomere.pval
+```
+
+## Keeping gene-annotated CpGs
+
+```{r filtering}
+if (filter_by_genes_present) {
+  ind <- annot.cg$UCSC_RefGene_Name != ""
+  M <- M[ rownames(M) %in% annot.cg$ID[ annot.cg$UCSC_RefGene_Name != "" ], ]
+}
+```
+
+
+    Object of class RnBeadRawSet
+          39 samples
+      708587 probes
+    	of which: 706061 CpG, 2473 CpH, and 53 rs
+    Region types:
+    	  230420 regions of type tiling
+    	   32909 regions of type genes
+    	   42427 regions of type promoters
+    	   25262 regions of type cpgislands
+    Intensity information is present
+    Detection p-values are present
+    Bead counts are present
+    Quality control information is present
+    Summary of normalization procedures:
+    	The methylation data was normalized with method bmiq.
+    	No background correction was performed.
+
+# Principal Components Analysis
+
+## Exclude outliers
+
+```{r}
+samples_to_exclude <- c("6021_3_I", "6022_3_I", "6016_2_I", "6010_1_C")
+```
+
+
+```{r}
+# PCA: Check for batch effects. Select one batch, to color points by its assignment
+SD_CpG <- apply(rnb.set.norm.df[, !(colnames(rnb.set.norm.df) %in% samples_to_exclude)], 1, sd) # Variability across all CpGs
+# Most variable CpGs for PCA
+subset_for_pca <- rnb.set.norm.df[SD_CpG > quantile(SD_CpG, 0.75), !(colnames(rnb.set.norm.df) %in% samples_to_exclude)]
+
+pca <- subset_for_pca %>% t %>% scale %>% prcomp
+data.frame(summary(pca)$importance)[, 1:5] %>% pander # Percent of variance explained
+
+# What correlates with the first component
+covariates <- c("Sentrix.Barcode", "Visit", "Group", "Gender", "Race", "History.of.smoking.", "Education", "Cytogenetics", "ChemoRegimen", "telomere")
+for (covariate in covariates){
+  pca.lm <- lm( as.numeric(PC1) ~ factor(eval(parse(text = covariate))), data = cbind(sample_annotation[ !(sample_annotation$Study.ID %in% samples_to_exclude), ], pca$x))
+  print(paste(covariate, "accounts for", signif(summary(pca.lm)$adj.r.squared, 5), "variability explained by PC1, p-value", signif(lmp(pca.lm), 5)))
+  # pca.lm <- lm( as.numeric(PC2) ~ factor(eval(parse(text = covariate))), data = cbind(sample_annotation, pca$x))
+  # print(paste(covariate, "accounts for", signif(summary(pca.lm)$adj.r.squared, 5), "variability explained by the second principle component, p-value", signif(lmp(pca.lm), 5)))
+  # pca.lm <- lm( as.numeric(PC3) ~ factor(eval(parse(text = covariate))), data = cbind(sample_annotation, pca$x))
+  # print(paste(covariate, "accounts for", signif(summary(pca.lm)$adj.r.squared, 5), "variability explained by the third principle component, p-value", signif(lmp(pca.lm), 5)))
+}
+
+colorby <- "Visit"
+shapeby <- "Group"
+pt <- ggplot(data = data.frame(pca$x, Visit = factor(sample_annotation$Visit[ !(sample_annotation$Study.ID %in% samples_to_exclude) ]), Group = factor(sample_annotation$Group)[ !(sample_annotation$Study.ID %in% samples_to_exclude) ], samples = sample_annotation$Study.ID[ !(sample_annotation$Study.ID %in% samples_to_exclude) ], stringsAsFactors = F), 
+             aes(x = as.numeric(PC1), y = as.numeric(PC2), label = samples)) +
+  theme(plot.title = element_text(lineheight = 0.8, face="bold")) +
+  ggtitle(paste("PCA with batch, coloring by ", colorby)) +
+  geom_point(aes(color = Visit, shape = Group), size = 3) +
+  geom_text_repel(colour = "black", size = 3) +
+  geom_hline(yintercept = 0, colour = "gray65") +
+  geom_vline(xintercept = 0, colour = "gray65") +
+  labs(color = colorby) +
+  scale_x_continuous(name = paste0("PC1, ", round(summary(pca)$importance[2,1] * 100, digits = 2), "% variability" )) +
+  scale_y_continuous(name = paste0("PC2, ", round(summary(pca)$importance[2,2] * 100, digits = 2), "% variability" ))
+plot(pt)
+
+
+#ggsave(filename = "Figures/Figure_PCA_withbatch.pdf", plot = pt, height = 8, width = 11)
+```
+
+# Annotation
+
+We attach selected probe annotations provided by Illumina. The results are in 
+
+| Column Name                 | Description                                                                                              |
+|-----------------------------|----------------------------------------------------------------------------------------------------------|
+| IlmnID                      | Unique CpG locus identifier from the Illumina CG database                                                |
+| Name                        | Unique CpG locus identifier from the Illumina CG database                                                |
+| CHR                         | Chromosome - genome build 37                                                                             |
+| MAPINFO                     | Coordinates - genome build 37                                                                            |
+| Probe_SNPs                  | Assays with SNPs present within probe >10bp from query site                                              |
+| Probe_SNPs_10               | Assays with SNPs present within probe ≤10bp from query site (HM27 carryover or recently discovered)      |
+| UCSC_RefGene_Name           | Gene name (UCSC)                                                                                         |
+| UCSC_RefGene_Group          | Gene region feature category (UCSC)                                                                      |
+| UCSC_CpG_Islands_Name       | CpG island name (UCSC)                                                                                   |
+| Relation_to_UCSC_CpG_Island | Relationship to Canonical CpG Island: Shores - 0-2 kb from CpG island; Shelves - 2-4 kb from CpG island. |
+| Phantom                     | FANTOM-derived promoter                                                                                  |
+| DMR                         | Differentially methylated region (experimentally determined)                                             |
+| Enhancer                    | Enhancer element (informatically-determined)                                                             |
+| HMM_Island                  | Hidden Markov Model Island                                                                               |
+| Regulatory_Feature_Name     | Regulatory feature (informatically determined)                                                           |
+| Regulatory_Feature_Group    | Regulatory feature category                                                                              |
+| DHS                         | DNAse hypersensitive site (experimentally determined)                                                    |
+
+
+# LIMMA, differential methylation analysis
+
+- Legend for gene lists: "Gene" - gene annotations; "logFC" - log fold change; "AveExpr" - average expression, log2; "t" - t-statistics; "P.Val"/"adj.P.Val" - non-/FDR-adjusted p-value, "B" - another statistics.
+
+- DEGs results are mostly unfiltered, p-value cutoff < `r pval.cutoff`, adjusted p-value cutoff < 1. Genes for functional enrichment analysis are custom filtered, see notes.
+
+- Legend for GO/KEGG functional enrichment results: "ID" - unique identifier of functional category; "Pvalue" - non-adjusted p-value; "OddsRatio" - enrichment odds ratio; "ExpCount" - number of genes expected to be selected in a category; "Count" - number of genes observed in the current list; "Size" - total number of genes in a category; "Term" - category description; "p.adj" - false discovery rate; "SYMBOL", "ENTREZ" - genes observed in the current list as annotated with a category
+
+
+```{r}
+# A function to perform limma on a tissue subset
+make.limma <- function(M = M, sample_annotation = sample_annotation, tissue = "Kidney", group = "") {
+  ind <- sample_annotation$Tissue == tissue # Subset by tissue
+  if (group != "") ind <- ind & sample_annotation$Sample_Group == group # and, if needed, group
+  
+  M.sub <- M[, ind]
+  annot.sub <- sample_annotation[ind, ]
+  
+  # If gender has one level, use simplified design matrix
+  if (length(unique(annot.sub$gender)) <= 1){
+    design <- model.matrix(~ factor(Sample_Name), data = annot.sub)
+  } else {
+    design <- model.matrix(~ factor(Sample_Name) + factor(gender), data = annot.sub) # Sample_Plate.Batch
+  }
+  colnames(design) <- make.names(sub("factor(", "", colnames(design), fixed = TRUE))
+  
+  fit <- lmFit(M.sub, design)
+  fit.c <- eBayes(fit)
+  return(fit.c)
+}
+
+# A function to get DEGs for a contrast with specific p-value cutoffs
+make.degs <- function(fit.c = fit.c, coef = "Sample_Name.K2", pval.cutoff = 1, adjust.method = adjust.method, annot.cg = annot.cg, grch38.slim = grch38.slim, fileName = fileName) {
+  tt <- topTable(fit.c, number=Inf, coef = coef, adjust.method = adjust.method, p.value = pval.cutoff) # All results of differential expression analysis
+  mtx <- tt[ tt$P.Value < pval.cutoff & tt$adj.P.Val < adj.p.cutoff, ]
+  
+  # Attach selected annotations to the full matrix
+  mtx <- mtx[rownames(mtx) %in% annot.cg$ID, ]
+  mtx <- left_join(tbl_df(data.frame(ID = rownames(mtx), mtx, stringsAsFactors = FALSE)), tbl_df(annot.cg[, c("ID", "UCSC_RefGene_Name", "UCSC_RefGene_Group", "Phantom4_Enhancers", "Phantom5_Enhancers", "DMR", "X450k_Enhancer", "HMM_Island", "Regulatory_Feature_Name", "Regulatory_Feature_Group", "GencodeBasicV12_NAME", "GencodeBasicV12_Accession", "GencodeBasicV12_Group", "GencodeCompV12_NAME", "GencodeCompV12_Accession", "GencodeCompV12_Group", "DNase_Hypersensitivity_NAME", "DNase_Hypersensitivity_Evidence_Count", "OpenChromatin_NAME", "OpenChromatin_Evidence_Count", "TFBS_NAME", "TFBS_Evidence_Count", "Methyl27_Loci", "Methyl450_Loci", "Random_Loci")]), by = c("ID" = "ID"))
+  # Full matrix of significant CpGs
+  # Collapse repetitive names, like "ABAT;ABAT"
+  mtx$UCSC_RefGene_Name <- sapply(mtx$UCSC_RefGene_Name, function(x) strsplit(x, ";") %>% unlist %>% sort %>% unique %>% paste(collapse="|")) %>% unlist %>% as.character  
+  mtx$UCSC_RefGene_Group <- sapply(mtx$UCSC_RefGene_Group, function(x) strsplit(x, ";") %>% unlist %>% sort %>% unique %>% paste(collapse="|")) %>% unlist %>% as.character  
+  # Attach gene name description
+  UCSC_RefGene_Description <- vector(mode = "character", length = length(mtx$UCSC_RefGene_Name))
+  for (i in 1:length(mtx$UCSC_RefGene_Name)) {
+    if (all(!is.na(mtx$UCSC_RefGene_Name[i]), mtx$UCSC_RefGene_Name[i] != "")) { # Proceed if something is present
+      a = mtx$UCSC_RefGene_Name[i] # Gene(s) of interest
+      b = strsplit(a, "|", fixed = TRUE) %>% unlist # Split them, if multiple
+      c = grch38.slim[ grch38.slim$symbol %in% b, "description"] # Append description
+      UCSC_RefGene_Description[i] <- paste(c$description, collapse = "|") # Collapse descriptions, if multiple
+    }
+  }
+  mtx <- cbind(mtx, UCSC_RefGene_Description)
+  mtx$logFC <- formatC(mtx$logFC, format = "g", digits = 3)
+  mtx$AveExpr <- formatC(mtx$AveExpr, format = "g", digits = 3)
+  mtx$t <- formatC(mtx$t, format = "g", digits = 3)
+  mtx$B <- formatC(mtx$B, format = "g", digits = 3)
+  mtx$P.Value <- formatC(mtx$P.Value, format = "e", digits = 3)
+  mtx$adj.P.Val <- formatC(mtx$adj.P.Val, format = "e", digits = 3)
+  # Save the results
+  # Create (or, load)  Excel file
+  unlink(fileName)
+  wb <- openxlsx::createWorkbook(fileName) # openxlsx::loadWorkbook(fileName)
+  save_res(mtx, fileName = fileName, wb = wb, sheetName = "DEGs")
+
+  return(mtx)
+}
+
+# A function to plot a heatmap of top differential genes
+make.heatmap <- function(eset_selected = eset_selected, mtx = mtx, annotation_col = annotation_col, num.to.plot = 20) {
+  cpg.to.plot <- mtx[ mtx$UCSC_RefGene_Name != "", "ID"][ 1:min(num.to.plot, nrow(mtx))]
+  genes.to.plot <- mtx[ mtx$UCSC_RefGene_Name != "", "UCSC_RefGene_Name"][ 1:min(num.to.plot, nrow(mtx))]
+  M.to.plot <- eset_selected[cpg.to.plot, , drop = FALSE]
+  pheatmap(M.to.plot, color = colorRampPalette(c("yellow", "blue"))(100), scale = "row", clustering_method = "single", annotation_col = annotation_col, labels_row = genes.to.plot)
+}
+
+# A wrapper function to perform all functional enrichment analyses.
+# Helper function to save non-empty results
+save_res <- function(res, fileName = fileName, wb = wb, sheetName = "KEGG") {
+  if (nrow(res) > 0) {
+    openxlsx::addWorksheet(wb = wb, sheetName = sheetName)
+    openxlsx::writeData(wb, res, sheet = sheetName)
+    openxlsx::saveWorkbook(wb, fileName, overwrite = TRUE)
+  }
+}
+
+# Functional enrichment analysis
+# A wrapper function to perform all functional enrichment analyses. The 'fileName' should have 'xlsx' extension
+all.enrichment.analyses <- function(genes = degs$Gene.Symbol, id="symbol", fileName = fileName) {
+  wb <- loadWorkbook(fileName) # Open file for writing
+#  # Gene ontology, molecular function
+#  res <- gene_enrichment(selected = genes, id=id, organism = "Hs", use="GO", ont="MF", p.adj = 1)
+#    addWorksheet(wb, sheetName = "GOMF")
+#    writeData(wb, sheet = "GOMF", res)
+#  # Gene ontology, biological process
+#  res <- gene_enrichment(selected = genes, id=id, organism = "Hs", use="GO", ont="BP", p.adj = 1)
+#    addWorksheet(wb, sheetName = "GOBP")
+#    writeData(wb, sheet = "GOBP", res)
+#  # Gene ontology, cellular component
+#  res <- gene_enrichment(selected = genes, id=id, organism = "Hs", use="GO", ont="CC", p.adj = 1)
+#    addWorksheet(wb, sheetName = "GOCC")
+#    writeData(wb, sheet = "GOCC", res)
+  # KEGG canonical pathways
+  res <- gene_enrichment(selected = genes, id=id, organism = "Hs", use="KEGG", p.adj = 1)
+  res$Pvalue <- formatC(res$Pvalue, format = "e", digits = 3)
+  res$OddsRatio <- formatC(res$OddsRatio, format = "g", digits = 3)
+  res$ExpCount <- formatC(res$ExpCount, format = "g", digits = 3)
+    addWorksheet(wb, sheetName = "KEGG")
+    writeData(wb, sheet = "KEGG", res)
+  saveWorkbook(wb, fileName, overwrite = TRUE)
+  return(res)
+}
+```
+
+
+
+## Diff - Intervention vs. Control 
+
+```{r fig.height=9, fig.width=14}
+fileName <- "results/Diff.xlsx"
+# Index to subset by
+# Exclude samples
+ind <- !(sample_annotation$Study.ID %in% c("6021_3_I", "6022_3_I", "6016_2_I", "6010_1_C"))
+# Subset expression
+eset_selected <- M[, ind]
+# Comparison factor, from page 43 of https://www.bioconductor.org/packages/devel/bioc/vignettes/limma/inst/doc/usersguide.pdf
+TS <- paste(sample_annotation$Group[ ind ], sample_annotation$Visit[ ind ], sep = ".") # Visit (1/3) = Treatment (U/S), Group (C/I) = Strain (WT/Mu)
+TS <- factor(TS, levels = c("C.1", "C.3", "I.1", "I.3"))
+# Other covariates
+Age       <- sample_annotation$Age[ ind ]
+Gender    <- factor(sample_annotation$Gender[ ind ])
+Race      <- factor(sample_annotation$Race[ ind ])
+History_of_smoking <- factor(sample_annotation$History.of.smoking.[ ind ])
+Marital   <- factor(sample_annotation$Martial.Status[ ind ])
+Education <- factor(sample_annotation$Education[ ind ])
+Cytogenetics <- factor(sample_annotation$Cytogenetics[ ind ])
+Chemo <- factor(sample_annotation$ChemoRegimen[ ind ])
+batch1 <- factor(sample_annotation$Sentrix.Barcode[ ind ])
+telomere <- sample_annotation$telomere[ ind ]
+
+# Limma
+design <- model.matrix(~0 + TS + batch1 + Age + Gender + Race + telomere)# + Marital + Education + Cytogenetics + Chemo)
+colnames(design) <- c(levels(TS), colnames(design)[ (length(levels(TS)) + 1):length(colnames(design)) ] )
+colnames(design) <- make.names(colnames(design))
+fit <- lmFit(eset_selected, design)
+cont.matrix <- makeContrasts(inC3vs1 = C.3 - C.1,
+                             inI3vs1 = I.3 - I.1,
+                             Diff = (I.3 - I.1) - (C.3 - C.1),
+                             levels = design)
+fit2 <- contrasts.fit(fit, cont.matrix)
+fit2 <- eBayes(fit2)
+results <- decideTests(fit2, adjust.method = adjust.method, p.value = pval.cutoff)
+vennDiagram(results)
+
+# Get all differentially expressed genes
+mtx <- make.degs(fit.c = fit2, coef = "Diff", pval.cutoff = pval.cutoff, adjust.method = adjust.method, annot.cg = annot.cg, grch38.slim = grch38.slim, fileName = fileName)
+
+# for (i in seq(0.1, 1, by = 0.01)) {
+#   mtx <- topTable(fit = fit2, coef = "Diff", number = Inf, p.value = i)
+#   print(paste("adj.p.val cutoff:", i, ", number of rows", nrow(mtx[ as.numeric(mtx$adj.P.Val) <= i, ])))
+# }
+# Using full model
+# [1] "adj.p.val cutoff: 0.57 , number of rows 0"
+# [1] "adj.p.val cutoff: 0.58 , number of rows 28703"
+# [1] "adj.p.val cutoff: 0.59 , number of rows 40299"
+# [1] "adj.p.val cutoff: 0.6 , number of rows 50743"
+
+# Custom subsetting
+# adj.p.cutoff <- 0.58
+# dim(mtx[ as.numeric(mtx$adj.P.Val) <= adj.p.cutoff, ])
+# mtx <- mtx[ as.numeric(mtx$adj.P.Val) <= adj.p.cutoff, ]
+# Genes for enrichment analysis
+genes.up <- unique(unembed(mtx[mtx$logFC > 0, "UCSC_RefGene_Name", drop = FALSE], "UCSC_RefGene_Name", "|")$UCSC_RefGene_Name)
+genes.dn <- unique(unembed(mtx[mtx$logFC < 0, "UCSC_RefGene_Name", drop = FALSE], "UCSC_RefGene_Name", "|")$UCSC_RefGene_Name)
+
+datatable(mtx)
+```
+
+Note that for the functional enrichment analysis the adjusted (`r adjust.method`) p-value cutoff was set to < `r pval.cutoff`, keeping `r nrow(mtx)` CpGs. Upregulated: `r length(genes.up)`, downregulated: `r length(genes.dn)`
+
+List of differentially expressed genes are stored in Excel file  `r fileName`
+
+### Heatmap
+
+```{r fig.height=12, fig.width=14, eval = TRUE}
+# Annotation for columns on the heatmap
+annotation_col <- data.frame(Visit = (sample_annotation$Visit[ ind ]), Group = sample_annotation$Group[ ind ])
+rownames(annotation_col) <- colnames(eset_selected)
+# Select condition
+condition_index <- ((annotation_col$Visit == "1" | annotation_col$Visit == "3") & annotation_col$Group == "I" | annotation_col$Group == "C")
+# Plot heatmap
+make.heatmap(eset_selected = eset_selected[, condition_index], mtx = mtx, annotation_col = annotation_col[condition_index, ], num.to.plot = num.to.plot)
+```
+
+### KEGG UP
+
+```{r eval = TRUE}
+wb <- loadWorkbook(fileName) # Open file for writing
+res <- save_enrichr(up.genes = genes.up, dn.genes = genes.dn, databases = "KEGG_2016", fileNameOut = fileName, wb = wb, sheetName = "KEGG_2016")
+```
+
+```{r}
+DT::datatable(res[res$direction == "UP", ])
+```
+
+### KEGG DN
+
+```{r}
+DT::datatable(res[res$direction == "DN", ])
+```
+
+
+
+```{r eval=FALSE}
+library(pathview)
+library(openxlsx)
+fileName <- "results/K2vsK1.xlsx"
+fileName <- "results/L2vsL1.xlsx"
+degs <- read.xlsx(fileName, cols = c(13, 2))
+degs <- unembed(degs, "UCSC_RefGene_Name", "|")
+degs.genes <- degs$logFC
+names(degs.genes) <- degs$UCSC_RefGene_Name
+# Adjust as needed
+pv.out <- pathview(gene.data = degs.genes, pathway.id = "04310", species = "hsa", gene.idtype = "SYMBOL", gene.annotpkg = "org.Hs.eg.db", out.suffix = "L2vsL1")
+```
+
+
+```{r session_info}
+diagnostics <- devtools::session_info()
+platform <- data.frame(diagnostics$platform %>% unlist, stringsAsFactors = FALSE)
+colnames(platform) <- c("description")
+pander(platform)
+
+packages <- as.data.frame(diagnostics$packages)
+pander(packages[ packages$`*` == "*", ])
+```

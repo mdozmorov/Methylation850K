@@ -1,0 +1,119 @@
+---
+title: "Pathway analyis"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    # theme: united
+    theme: cerulean
+    # number_sections: true
+date: "`r Sys.Date()`"
+author: "Mikhail Dozmorov"
+csl: /Users/mdozmorov/Documents/Work/presentations/grant_template/styles.ref/genomebiology.csl
+bibliography: /Users/mdozmorov/Documents/Work/VCU_grants/0_Dozmorov/Sections/sections.bib
+---
+
+```{r setup, echo=FALSE, message=FALSE, warning=FALSE}
+# Set up the environment
+library(knitr)
+opts_chunk$set(cache.path='cache/', fig.path='img/', cache=T, tidy=T, fig.keep='high', echo=F, dpi=100, warnings=F, message=F, comment=NA, warning=F, results='as.is') #out.width=700, 
+library(pander)
+panderOptions('table.split.table', Inf)
+set.seed(1)
+library(dplyr)
+options(stringsAsFactors = FALSE)
+```
+
+```{r}
+library(pathview)
+library(openxlsx)
+library(MDmisc)
+library(dplyr)
+library(org.Hs.eg.db)
+```
+
+
+```{r}
+fileName <- "data/preprocessed_data.Rdata"
+load(file = fileName)
+
+samples_to_exclude <- c("6021_3_I", "6022_3_I", "6016_2_I", "6010_1_C")
+ind <- !(sample_annotation$Study.ID %in% samples_to_exclude)
+```
+
+```{r eval = FALSE}
+# Subset expression
+eset_selected     <- M[, ind] # Remove bad samples
+common_cg         <- intersect(rownames(eset_selected), rownames(annot.cg))      # Keep annotated CpGs
+eset_selected     <- eset_selected[rownames(eset_selected) %in% common_cg, ]     # Subset to annotated CpGs
+annot.cg_selected <- annot.cg[rownames(annot.cg) %in% rownames(eset_selected), ] # Subset to annotated CpGs
+annot.cg_selected <- annot.cg_selected[match(rownames(eset_selected), rownames(annot.cg_selected)), ] # Match names
+annot.cg_selected[, "UCSC_RefGene_Name"] <- sapply(annot.cg_selected[, "UCSC_RefGene_Name"], function(x) strsplit(x, ";") %>% unlist %>% sort %>% unique %>% paste(collapse="|")) %>% unlist %>% as.character # Collapse genes
+all.equal(rownames(eset_selected), rownames(annot.cg_selected)) # Sanity check, should be true
+save(eset_selected, annot.cg_selected, file = "data/tmp.Rda")
+```
+
+```{r}
+load(file = "data/tmp.Rda")
+```
+
+# Note on coloring
+
+- Visit 3 was compared to visit 1, in control ("C") and intervention ("I") groups
+- Hypermethylated CpG sites - GREEN
+- Hypomethylated CpG sites - RED
+
+
+# inC3vs1
+
+```{r}
+# Subset annotation
+annotation_col <- data.frame(Visit = (sample_annotation$Visit[ ind ]), Group = sample_annotation$Group[ ind ])
+rownames(annotation_col) <- colnames(eset_selected)
+# Ratio on the subset
+ratio <- rowMeans(eset_selected[, annotation_col$Group == "C" & annotation_col$Visit == "3"]) - rowMeans(eset_selected[, annotation_col$Group == "C" & annotation_col$Visit == "1"])
+names(ratio) <- annot.cg_selected[, "UCSC_RefGene_Name"]
+# Select only significant genes
+degs <- read.xlsx("results/inC3vs1.xlsx", cols = 8)
+degs <- unembed(degs, "UCSC_RefGene_Name", "|")
+degs <- degs$UCSC_RefGene_Name %>% unique
+ratio <- ratio[names(ratio) %in% degs]
+# Aggregate
+ratio_summary <- aggregate(x = ratio, by = list(names(ratio)),  FUN = "median")
+ratio_pathway <- ratio_summary$x
+names(ratio_pathway) <- ratio_summary$Group.1
+```
+
+```{r}
+# Adjust as needed
+pv.out <- pathview(gene.data = -ratio_pathway, pathway.id = "05221", species = "hsa", gene.idtype = "SYMBOL", gene.annotpkg = "org.Hs.eg.db", out.suffix = "inC3vs1")
+```
+
+![](hsa05221.inC3vs1.png)
+
+# inI3vs1
+
+```{r}
+# Subset annotation
+annotation_col <- data.frame(Visit = (sample_annotation$Visit[ ind ]), Group = sample_annotation$Group[ ind ])
+rownames(annotation_col) <- colnames(eset_selected)
+# Ratio on the subset
+ratio <- rowMeans(eset_selected[, annotation_col$Group == "I" & annotation_col$Visit == "3"]) - rowMeans(eset_selected[, annotation_col$Group == "I" & annotation_col$Visit == "1"])
+names(ratio) <- annot.cg_selected[, "UCSC_RefGene_Name"]
+# Select only significant genes
+degs <- read.xlsx("results/inI3vs1.xlsx", cols = 8)
+degs <- unembed(degs, "UCSC_RefGene_Name", "|")
+degs <- degs$UCSC_RefGene_Name %>% unique
+ratio <- ratio[names(ratio) %in% degs]
+# Aggregate
+ratio_summary <- aggregate(x = ratio, by = list(names(ratio)),  FUN = "median")
+ratio_pathway <- ratio_summary$x
+names(ratio_pathway) <- ratio_summary$Group.1
+```
+
+```{r}
+# Adjust as needed
+pv.out <- pathview(gene.data = -ratio_pathway, pathway.id = "05221", species = "hsa", gene.idtype = "SYMBOL", gene.annotpkg = "org.Hs.eg.db", out.suffix = "inI3vs1")
+```
+
+![](hsa05221.inI3vs1.png)
