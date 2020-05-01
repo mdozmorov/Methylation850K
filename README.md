@@ -6,6 +6,10 @@
 
 Data: https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE123995
 
+# ToDo
+
+- Cell proportion
+
 # Done 
 
 - Age prediction
