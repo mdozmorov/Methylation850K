@@ -31,7 +31,11 @@ library (snow)
 Sample annotation file should be in the same folder as the idats in order for ChAMP to process them together.
 
 ```{r settings}
+# Lucas's path
 data.dir = "/Users/lucasrizkalla/Desktop/Methylation Research-VCU/Methylation850K"
+# Mikhail's path
+data.dir = "/Users/mdozmorov/Documents/nobackup/GSE123995_RAW_10"
+
 idat.dir = file.path(data.dir, "idats")
 ```
 
