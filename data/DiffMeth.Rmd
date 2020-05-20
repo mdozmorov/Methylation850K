@@ -1,0 +1,64 @@
+---
+title: "Differential Methylation"
+author: "Lucas Rizkalla"
+date: "`r Sys.Date()`"
+output:
+  pdf_document:
+    toc: no
+  html_document:
+    theme: cerulean
+    toc: yes
+---
+
+```{r setup, echo=FALSE, message=FALSE, warning=FALSE}
+# Set up the environment
+library(knitr)
+opts_chunk$set(cache.path='cache/', fig.path='img/', cache=F, tidy=T, fig.keep='high', echo=F, dpi=100, warnings=F, message=F, comment=NA, warning=F, results='as.is', fig.width = 10, fig.height = 6) #out.width=700, 
+library(pander)
+panderOptions('table.split.table', Inf)
+set.seed(1)
+library(dplyr)
+options(stringsAsFactors = FALSE)
+```
+
+```{r libraries}
+library (RnBeads)
+```
+
+```{r settings}
+data.dir = "/Users/lucasrizkalla/Desktop/Methylation Research-VCU/Methylation850K/data/"
+idat.dir = file.path(data.dir, "idats")
+sample.annot.abrev = file.path(data.dir, "Sample_Annot_Abrev.csv" )
+```
+
+#Data Import, QC, Preprocessing, and Norm
+```{r}
+logger.start(fname=NA)
+data.source <- c(idat.dir, sample.annot.abrev)
+rnb.options(inference.age.column="Age")
+
+rnb.set <- rnb.execute.import(data.source=data.source,
+                              data.type="idat.dir")
+
+report.dir = file.path(data.dir, "AgeReport")
+rnb.set.qc <- rnb.run.qc(rnb.set, report.dir)
+
+rnb.set.unfiltered <- rnb.set
+result <- rnb.run.preprocessing(rnb.set, dir.reports=report.dir)
+rnb.set.norm <- result$rnb.set
+```
+
+#Pairwise Analysis
+```{r}
+rnb.options("differential.comparison.columns"=c("Visit"),"columns.pairing"=c("Visit"="ID"))
+rnb.options("covariate.adjustment.columns"=c("Race"))
+
+diffMeth <- rnb.execute.computeDiffMeth(rnb.set.norm, pheno.cols = "Visit")
+comparison <- get.comparisons(diffMeth)[1]
+tab.sites <- get.table(diffMeth, comparison, "sites", return.data.frame = TRUE)
+```
+
+
+```{r session_info}
+xfun::session_info()
+```
