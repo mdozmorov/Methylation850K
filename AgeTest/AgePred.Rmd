@@ -13,7 +13,7 @@ output:
 ```{r setup, echo=FALSE, message=FALSE, warning=FALSE}
 # Set up the environment
 library(knitr)
-opts_chunk$set(cache.path='cache/', fig.path='img/', cache=F, tidy=T, fig.keep='high', echo=F, dpi=100, warnings=F, message=F, comment=NA, warning=F, results='as.is', fig.width = 10, fig.height = 6) #out.width=700, 
+opts_chunk$set(cache.path='cache/', fig.path='img/', cache=F, tidy=T, fig.keep='high', echo=F, dpi=100, warnings=F, message=F, comment=NA, warning=F, results='as.is', fig.width = 10, fig.height = 6) # out.width=700, 
 library(pander)
 panderOptions('table.split.table', Inf)
 set.seed(1)
@@ -33,12 +33,15 @@ library(tidyverse)
 ```{r settings}
 source("NORMALIZATION.R")
 runImport = FALSE
-data.dir = "/Users/lucasrizkalla/Desktop/Methylation Research-VCU/Methylation850K/data/"
+# Lukas's path
+data.dir           = "/Users/lucasrizkalla/Desktop/Methylation Research-VCU/Methylation850K/data"
+# Mikhail's path
+data.dir           = "/Users/mdozmorov/Documents/Data/VCU_work/Lathika"
 idat.dir = file.path(data.dir, "idats")
 sample.annotation = file.path(data.dir, "Sample_Annot_Abrev.csv")
 ```
 
-#RnBeads Data Import and Generate Bvalues 
+# RnBeads Data Import and Generate Bvalues 
 ```{r}
 if (runImport) {
   logger.start(fname=NA)
@@ -57,12 +60,17 @@ if (runImport) {
   rnb.options(identifiers.column="barcode")
   bvalues <- meth(rnb.set.norm, row.names = TRUE)
   
-  write.csv(bvalues, file = file.path(data.dir, "bvalues.csv"), quote = FALSE)
+  # Save as data frame
+  bvalues <- as.data.frame(rownames(bvalues), bvalues)
+  write_csv(bvalues, file.path(data.dir, "bvalues.csv"))
+  system(paste0("gzip ", file.path(data.dir, "bvalues.csv"))) # gzip because the file is large
 } else {
+  bvalues <- read_csv(file.path(data.dir, "bvalues.csv.gz")) %>% as.data.frame()
 }
 ```
 
-#Age transformation and probe annotation functions
+# Age transformation and probe annotation functions
+
 ```{r}
 trafo= function(x,adult.age=20) { x=(x+1)/(1+adult.age); y=ifelse(x<=1, log( x),x-1);y }
 anti.trafo= function(x,adult.age=20) { ifelse(x<0, (1+adult.age)*exp(x)-1, (1+adult.age)*x+adult.age) }
@@ -71,15 +79,16 @@ probeAnnotation27k=read.csv("datMiniAnnotation27k.csv")
 datClock=read.csv("AdditionalFile3.csv")
 ```
 
-#Read in the DNA methylation data (beta values)
+# Read in the DNA methylation data (beta values)
+
 ```{r}
-#dat0=read.csv.sql("MethylationDataExample55.csv")
-dat0= as.data.frame(read_csv("bvalues.csv"))
-nSamples=dim(dat0)[[2]]-1
-nProbes= dim(dat0)[[1]]
+# dat0=read.csv.sql("MethylationDataExample55.csv")
+dat0     = bvalues # Imported, or loaded precalculated
+nSamples = dim(dat0)[[2]]-1 # First column is barcode
+nProbes  = dim(dat0)[[1]]
 # the following command may not be needed. But it is sometimes useful when you use read.csv.sql
-dat0[,1]= gsub(x=dat0 [,1],pattern="\"",replacement="")
-#Create a log file which will be output into your directory
+dat0[,1] = gsub(x=dat0 [,1],pattern="\"",replacement="")
+# Create a log file which will be output into your directory
 # The code looks a bit complicated because it serves to create a log file (for error checks etc).
 # It will automatically create a log file.
 file.remove("LogFile.txt")
@@ -133,7 +142,8 @@ DoNotProceed=TRUE; cat(paste( "\n \n Input error: You forgot to include the foll
 }
 ```
 
-#STEP 2: Restrict the data to 21k probes and ensure they are numeric
+# STEP 2: Restrict the data to 21k probes and ensure they are numeric
+
 ```{r}
 match1=match(probeAnnotation21kdatMethUsed$Name , dat0[,1])
 if ( sum( is.na(match1))>0 ) stop(paste(sum( is.na(match1)), "CpG probes cannot be matched"))
@@ -142,15 +152,17 @@ asnumeric1=function(x) {as.numeric(as.character(x))}
 dat1[,-1]=apply(as.matrix(dat1[,-1]),2,asnumeric1)
 ```
 
-#STEP 3: Create the output file called datout
-```{r}
+# STEP 3: Create the output file called datout
+
+```{r results='hide', message=FALSE}
 set.seed(1)
 # Do you want to normalize the data (recommended)?
 normalizeData=TRUE
-source("StepwiseAnalysis.txt")
+source("StepwiseAnalysis.R")
 ```
 
 # STEP 4: Output the results 
+
 ```{r}
 if ( sum( datout$Comment != "" ) ==0 ) { cat(paste( "\n The individual samples appear to be fine.
 "),file="LogFile.txt",append=TRUE) }
@@ -158,7 +170,7 @@ if ( sum( datout$Comment != "" ) >0 ) { cat(paste( "\n Warnings were generated f
 datout[,1][datout$Comment != ""], "\n Hint: Check the output file for more details."),file="LogFile.txt",append=TRUE) }
 
 # output the results into the directory
-write.table(datout,"Output.csv", row.names=F, sep="," )
+write.table(datout, file.path(data.dir, "Horvath_Output.csv"), row.names=F, sep="," )
 ```
 
 ```{r session_info}
