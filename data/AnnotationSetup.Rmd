@@ -26,16 +26,20 @@ library(gdata)
 ```
 
 ```{r settings}
-data.dir = "/Users/lucasrizkalla/Desktop/Methylation Research-VCU/Methylation850K/data"
-sample.annotation = "/Users/lucasrizkalla/Desktop/Methylation Research-VCU/Methylation850K/data/Sample_Annotation.xlsx"
-description2sample = "/Users/lucasrizkalla/Desktop/Methylation Research-VCU/Methylation850K/data/library_ids_haib20TS6106.csv"
-sample2idat = "/Users/lucasrizkalla/Desktop/Methylation Research-VCU/Methylation850K/data/Sample_Table.csv"
+# Lukas's path
+data.dir           = "/Users/lucasrizkalla/Desktop/Methylation Research-VCU/Methylation850K/data"
+# Mikhail's path
+data.dir           = "/Users/mdozmorov/Documents/Work/GitHub/Methylation850K/data"
+# Annotation files
+sample.annotation  = file.path(data.dir, "Sample_Annotation.xlsx")
+description2sample = file.path(data.dir, "library_ids_haib20TS6106.csv")
+sample2idat        = file.path(data.dir, "Sample_Table.csv")
 ```
 
 #Creation of a Sample Annotation file that matches IDs of Idat files
 
 ```{r}
-myIdatName = read.csv(sample2idat)
+myIdatName   = read.csv(sample2idat)
 myIdentifier = read.csv(description2sample)
 myAnnotation = read.xls(sample.annotation)
 
@@ -44,7 +48,7 @@ myAnnotation <- myAnnotation[-c(41:125)]
 #Create new column to be used as idat file name (SentrixID_SentrixPosition)
 myIdatName$barcode = paste(myIdatName$BeadChip, "_", myIdatName$SSR, myIdatName$SSC, sep = "")
 #Sort by SampleName in order to cross reference with Sample in myIdatName (should be identical in order)
-myIdentifier = myIdentifier[order(myIdentifier$SampleName), ]
+myIdentifier = myIdentifier[order(myIdentifier$Sample.Name), ] # Had to add "."
 #Replace column with corresponding IDs that will be found in myAnnotation 
 myIdatName$Sample <- myIdentifier$Description
 
