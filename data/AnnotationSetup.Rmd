@@ -43,6 +43,11 @@ myIdatName   = read.csv(sample2idat)
 myIdentifier = read.csv(description2sample)
 myAnnotation = read.xls(sample.annotation)
 
+# Subset to common IDs
+common_id    <- intersect(myAnnotation$Identifier, myIdentifier$Description)
+myIdentifier <- myIdentifier[myIdentifier$Description %in% common_id, ]
+myIdatName   <- myIdatName[myIdatName$Sample %in% myIdentifier$Sample.Name, ]
+
 #Remove extra columns
 myAnnotation <- myAnnotation[-c(41:125)]
 #Create new column to be used as idat file name (SentrixID_SentrixPosition)
