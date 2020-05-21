@@ -26,7 +26,7 @@ library(gdata)
 ```
 
 ```{r settings}
-# Lukas's path
+# Lucas's path
 data.dir           = "/Users/lucasrizkalla/Desktop/Methylation Research-VCU/Methylation850K/data"
 # Mikhail's path
 data.dir           = "/Users/mdozmorov/Documents/Work/GitHub/Methylation850K/data"

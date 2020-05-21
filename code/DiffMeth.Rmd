@@ -26,12 +26,16 @@ library (RnBeads)
 ```
 
 ```{r settings}
-data.dir = "/Users/lucasrizkalla/Desktop/Methylation Research-VCU/Methylation850K/data/"
-idat.dir = file.path(data.dir, "idats")
+# Lucas's path
+data.dir           = "/Users/lucasrizkalla/Desktop/Methylation Research-VCU/Methylation850K/data"
+# Mikhail's path
+data.dir           = "/Users/mdozmorov/Documents/Data/VCU_work/Lathika"
+idat.dir           = file.path(data.dir, "idats")
 sample.annot.abrev = file.path(data.dir, "Sample_Annot_Abrev.csv" )
 ```
 
-#Data Import, QC, Preprocessing, and Norm
+# Data Import, QC, Preprocessing, and Norm
+
 ```{r}
 logger.start(fname=NA)
 data.source <- c(idat.dir, sample.annot.abrev)
@@ -48,7 +52,8 @@ result <- rnb.run.preprocessing(rnb.set, dir.reports=report.dir)
 rnb.set.norm <- result$rnb.set
 ```
 
-#Pairwise Analysis
+# Pairwise Analysis
+
 ```{r}
 rnb.options("differential.comparison.columns"=c("Visit"),"columns.pairing"=c("Visit"="ID"))
 rnb.options("covariate.adjustment.columns"=c("Race"))
