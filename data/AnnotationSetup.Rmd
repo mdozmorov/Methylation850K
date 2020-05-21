@@ -62,7 +62,9 @@ all.equal(myIdentifier$Sample.Name, myIdatName$Sample) # TRUE if order matches
 myIdatName$Sample <- myIdentifier$Description
 
 #Sort in numerical order so that it correspond correctly to myAnnotation
-myIdatName = myIdatName[order(myIdatName$Sample), ]
+myIdatName = myIdatName[order(myIdatName$Sample), ] # Fragile, but in this case works
+myIdatName = myIdatName[match(myAnnotation$Identifier, myIdatName$Sample), ] # Works always
+all.equal(myIdatName$Sample, myAnnotation$Identifier) # TRUE if the same order
 #Once sorted, replaced with correct Idat file name
 myAnnotation$Identifier <- myIdatName$barcode
 #Set column name to "barcode"
