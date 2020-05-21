@@ -73,6 +73,17 @@ names(myAnnotation)[names(myAnnotation) == "Identifier"] <- "barcode"
 mySampleAnnotation <- write.csv(myAnnotation, file = file.path(data.dir, "Sample_Annotation.csv"))
 ```
 
+# Subset to currently available samples
+
+```{r}
+sample.annotation = read.csv(file = file.path(data.dir, "Sample_Annotation.csv"))
+sample.annotation = sample.annotation[order(sample.annotation$barcode),] 
+sample.annotation[1:23, "barcode"] # From "204297420086_R01C01" to "204297420148_R07C01"
+sample.annot.abrev = sample.annotation[1:23,]
+sample.annot.abrev <- sample.annot.abrev[-c(1)] # First column is unnecessary
+write.csv(sample.annot.abrev, file = file.path(data.dir, "Sample_Annot_Abrev.csv"))
+```
+
 
 ```{r session_info}
 xfun::session_info()
