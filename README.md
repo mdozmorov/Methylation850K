@@ -1,5 +1,18 @@
 # Methylation analysis of Illumina 850K arrays
 
+- `ToDo.md`
+
+## `code` folder
+
+- `AnnotationSetup.Rmd` - Combine annotation files
+
+- `DiffMeth.Rmd` - differential methylation analysis
+
+
+## `AgeTest` folder
+
+- `AgePred.Rmd` - main analysis file. Other files - supplementary from Horvath
+
 
 ## `MD_code` folder
 
