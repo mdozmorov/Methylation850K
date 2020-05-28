@@ -22,18 +22,36 @@ options(stringsAsFactors = FALSE)
 ```
 
 ```{r libraries}
-library(gdata)
+library(readxl)
 ```
 
 ```{r settings}
 # Lucas's path
 data.dir           = "/Users/lucasrizkalla/Desktop/Methylation Research-VCU/Methylation850K/data"
 # Mikhail's path
-data.dir           = "/Users/mdozmorov/Documents/Work/GitHub/Methylation850K/data"
+# data.dir           = "/Users/mdozmorov/Documents/Work/GitHub/Methylation850K/data"
 # Annotation files
 sample.annotation  = file.path(data.dir, "Sample_Annotation.xlsx")
 description2sample = file.path(data.dir, "library_ids_haib20TS6106.csv")
 sample2idat        = file.path(data.dir, "Sample_Table.csv")
+```
+
+# Fill out EXCEL File with remaining ages and race 
+```{r}
+myAnnotation = read_xlsx(sample.annotation)
+
+IDCount = 1
+tryCatch(
+  for (ID in myAnnotation$ID) {
+    if (myAnnotation$ID[IDCount] == myAnnotation$ID[IDCount + 1]) {
+      myAnnotation$Age[IDCount + 1] <- myAnnotation$Age[IDCount]
+      myAnnotation$Race[IDCount + 1] <- myAnnotation$Race[IDCount]
+  }
+  IDCount = IDCount + 1
+  }, error = function(cond) {
+    message()
+  }
+)
 ```
 
 #Creation of a Sample Annotation file that matches IDs of Idat files
@@ -41,22 +59,21 @@ sample2idat        = file.path(data.dir, "Sample_Table.csv")
 ```{r}
 myIdatName   = read.csv(sample2idat)
 myIdentifier = read.csv(description2sample)
-myAnnotation = read.xls(sample.annotation)
 
 # Subset to common IDs
 common_id    <- intersect(myAnnotation$Identifier, myIdentifier$Description)
 myIdentifier <- myIdentifier[myIdentifier$Description %in% common_id, ]
-myIdatName   <- myIdatName[myIdatName$Sample %in% myIdentifier$Sample.Name, ]
+myIdatName   <- myIdatName[myIdatName$Sample %in% myIdentifier$SampleName, ]
 
 #Remove extra columns
-myAnnotation <- myAnnotation[-c(41:125)]
+#myAnnotation <- myAnnotation[-c(41:125)]
 #Create new column to be used as idat file name (SentrixID_SentrixPosition)
 myIdatName$barcode = paste(myIdatName$BeadChip, "_", myIdatName$SSR, myIdatName$SSC, sep = "")
 #Sort by SampleName in order to cross reference with Sample in myIdatName (should be identical in order)
 # This seems like a bug. all.equal test fails 
 # myIdentifier = myIdentifier[order(myIdentifier$Sample.Name), ] # Had to add "."
 # all.equal(myIdentifier$Sample.Name, myIdatName$Sample)
-myIdentifier <- myIdentifier[match(myIdatName$Sample, myIdentifier$Sample.Name), ]
+myIdentifier <- myIdentifier[match(myIdatName$Sample, myIdentifier$SampleName), ]
 all.equal(myIdentifier$Sample.Name, myIdatName$Sample) # TRUE if order matches
 #Replace column with corresponding IDs that will be found in myAnnotation 
 myIdatName$Sample <- myIdentifier$Description
