@@ -14,6 +14,8 @@
 
 - Predict Age and make a plot for samples having A and B visits. X-axis - Visit (A and B), Y-axis - Age. For each pair of visits for a sample, connect the Age measures with a line. Goal - to see the overall trend that the predicted age is increasing from A to B visit, or not.
     - Test whether the predicted age is significantly different from the actual age. Separately at A and B visits
+    - How predicted and actual ages correlate? Does correlation change between A and B visits?
+
 
 - Cell type inference, to be used as covariates
 
