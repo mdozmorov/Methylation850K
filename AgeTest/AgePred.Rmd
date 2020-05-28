@@ -33,10 +33,10 @@ library(tidyverse)
 ```{r settings}
 source("NORMALIZATION.R")
 runImport = FALSE
-# Lukas's path
+# Lucas's path
 data.dir           = "/Users/lucasrizkalla/Desktop/Methylation Research-VCU/Methylation850K/data"
 # Mikhail's path
-data.dir           = "/Users/mdozmorov/Documents/Data/VCU_work/Lathika"
+# data.dir           = "/Users/mdozmorov/Documents/Data/VCU_work/Lathika"
 idat.dir = file.path(data.dir, "idats")
 sample.annotation = file.path(data.dir, "Sample_Annot_Abrev.csv")
 ```
@@ -61,11 +61,11 @@ if (runImport) {
   bvalues <- meth(rnb.set.norm, row.names = TRUE)
   
   # Save as data frame
-  bvalues <- as.data.frame(rownames(bvalues), bvalues)
-  write_csv(bvalues, file.path(data.dir, "bvalues.csv"))
-  system(paste0("gzip ", file.path(data.dir, "bvalues.csv"))) # gzip because the file is large
+  bvalues <- as.data.frame(bvalues, row.names = rownames(bvalues))
+  write.csv(bvalues, file.path(data.dir, "bvalues.csv"))
+  system(paste0("gzip", file.path(data.dir, "bvalues.csv"))) # gzip because the file is large
 } else {
-  bvalues <- read_csv(file.path(data.dir, "bvalues.csv.gz")) %>% as.data.frame()
+  bvalues <- read_csv(file.path(data.dir, "bvalues.csv.qz")) %>% as.data.frame()
 }
 ```
 
@@ -171,6 +171,65 @@ datout[,1][datout$Comment != ""], "\n Hint: Check the output file for more detai
 
 # output the results into the directory
 write.table(datout, file.path(data.dir, "Horvath_Output.csv"), row.names=F, sep="," )
+```
+
+# Plotting Change in Predicted Age Between Visits
+
+```{r}
+results <- read.csv(file.path(data.dir, "Horvath_Output.csv"))
+sample.annotation <- read.csv(file.path(data.dir, "Sample_Annot_Abrev.csv"))
+sample.annotation <- sample.annotation[-c(1)]
+
+DNAmAge <- results$DNAmAge[match(results$SampleID, sample.annotation$barcode, )]
+sample.annotation <- sample.annotation %>% add_column("DNAmAge" = DNAmAge, .after = "Age")
+sample.annotation <- sample.annotation[order(sample.annotation$ID, sample.annotation$Visit), ]
+
+groupAIndex = c()
+groupBIndex = c()
+IDCount = 1
+index = 1
+tryCatch(
+  for (ID in sample.annotation$ID) {
+    if (sample.annotation$ID[IDCount] == sample.annotation$ID[IDCount + 1]) {
+      groupAIndex[index] <- IDCount
+      groupBIndex[index] <- IDCount + 1
+      index = index + 1
+    }
+  IDCount = IDCount + 1
+  }, error = function(cond) {
+    message()
+  }
+)
+
+p <- ggplot(sample.annotation, aes(x=Visit, y= DNAmAge)) + geom_dotplot(binaxis='y', stackdir='center')
+
+i = 1
+for (i in 1:length(groupAIndex)){
+  p <- p + geom_segment( x = "A", y = sample.annotation$DNAmAge[groupAIndex[i]], xend = "B", yend = sample.annotation$DNAmAge[groupBIndex[i]])
+  i = i + 1
+}
+
+p + theme(axis.text=element_text(size=28), axis.title=element_text(size=32,face="bold")) + scale_y_continuous(breaks=seq(20,70,5))
+
+```
+
+# Anaylysing Difference in Predicted Age 
+```{r}
+ageDifference <- sample.annotation$Age - sample.annotation$DNAmAge
+sample.annotation <- sample.annotation %>%add_column("AgeDifference" = ageDifference, .after = "DNAmAge")
+
+quartz()
+plot(x = sample.annotation$Age, y = sample.annotation$DNAmAge, col = "blue", xaxt = "none", yaxt = "none", xlab = "Actual", ylab = "Predicted", cex = 1, pch = 16, font = 2, cex.lab = 1.3) + mtext(side = 3, line = 1, "Predicted Vs Actual Age (Both Visits)", font = 2, cex = 1.5) + axis(1, seq(10, 70, 5), cex = 1) + axis(2, seq(10,70,5), las=2) + abline(lm(sample.annotation$DNAmAge ~ sample.annotation$Age))
+cor(sample.annotation$Age, sample.annotation$DNAmAge)
+
+quartz()
+plot (x = sample.annotation$Age[groupAIndex], y = sample.annotation$DNAmAge[groupAIndex], col = "green", xaxt = "none", yaxt = "none", xlab = "Actual", ylab = "Predicted", cex = 1, pch = 16, font = 2, cex.lab = 1.3) + mtext(side = 3, line = 1, "Predicted Vs Actual Age (Visit A)", font = 2, cex = 1.5) + axis(1, seq(10, 70, 5), cex = 1) + axis(2, seq(10,70,5), las=2) + abline(lm(sample.annotation$DNAmAge[groupAIndex]~sample.annotation$Age[groupAIndex]))
+cor(sample.annotation$Age[groupAIndex], sample.annotation$DNAmAge[groupAIndex])
+
+quartz()
+plot (x = sample.annotation$Age[groupBIndex], y = sample.annotation$DNAmAge[groupBIndex], col = "red", xaxt = "none", yaxt = "none", xlab = "Actual", ylab = "Predicted", cex = 1, pch = 16, font = 2, cex.lab = 1.3) + mtext(side = 3, line = 1, "Predicted Vs Actual Age (Visit B)", font = 2, cex = 1.5) + axis(1, seq(10, 70, 5), cex = 1) + axis(2, seq(10,70,5), las=2) + abline(lm(sample.annotation$DNAmAge[groupBIndex]~sample.annotation$Age[groupBIndex]))
+cor(sample.annotation$Age[groupBIndex], sample.annotation$DNAmAge[groupBIndex])
+
 ```
 
 ```{r session_info}
