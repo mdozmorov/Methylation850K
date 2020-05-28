@@ -29,7 +29,9 @@ library (RnBeads)
 # Lucas's path
 data.dir           = "/Users/lucasrizkalla/Desktop/Methylation Research-VCU/Methylation850K/data"
 # Mikhail's path
-data.dir           = "/Users/mdozmorov/Documents/Data/VCU_work/Lathika"
+# data.dir           = "/Users/mdozmorov/Documents/Data/VCU_work/Lathika"
+
+runImport = TRUE
 idat.dir           = file.path(data.dir, "idats")
 sample.annot.abrev = file.path(data.dir, "Sample_Annot_Abrev.csv" )
 ```
@@ -37,30 +39,44 @@ sample.annot.abrev = file.path(data.dir, "Sample_Annot_Abrev.csv" )
 # Data Import, QC, Preprocessing, and Norm
 
 ```{r}
-logger.start(fname=NA)
-data.source <- c(idat.dir, sample.annot.abrev)
-rnb.options(inference.age.column="Age")
+filename = file.path(data.dir, "preprocessed_data.Rdata")
+  
+if (runImport) {
+  logger.start(fname=NA)
+  data.source <- c(idat.dir, sample.annot.abrev)
+  rnb.options(inference.age.column="Age")
+  
+  rnb.set <- rnb.execute.import(data.source=data.source,
+                                data.type="idat.dir")
+  
+  report.dir = file.path(data.dir, "AgeReport")
+  rnb.run.qc(rnb.set, report.dir)
+  
+  rnb.set.unfiltered <- rnb.set
+  result <- rnb.run.preprocessing(rnb.set, dir.reports=report.dir)
+  rnb.set.norm <- result$rnb.set
+} else {
+  load(file = fileName)
+}
 
-rnb.set <- rnb.execute.import(data.source=data.source,
-                              data.type="idat.dir")
-
-report.dir = file.path(data.dir, "AgeReport")
-rnb.set.qc <- rnb.run.qc(rnb.set, report.dir)
-
-rnb.set.unfiltered <- rnb.set
-result <- rnb.run.preprocessing(rnb.set, dir.reports=report.dir)
-rnb.set.norm <- result$rnb.set
 ```
 
 # Pairwise Analysis
 
 ```{r}
 rnb.options("differential.comparison.columns"=c("Visit"),"columns.pairing"=c("Visit"="ID"))
-rnb.options("covariate.adjustment.columns"=c("Race"))
+rnb.options("covariate.adjustment.columns"=c("Race", "Age"))
 
 diffMeth <- rnb.execute.computeDiffMeth(rnb.set.norm, pheno.cols = "Visit")
 comparison <- get.comparisons(diffMeth)[1]
+
 tab.sites <- get.table(diffMeth, comparison, "sites", return.data.frame = TRUE)
+tab.cpgislands <- get.table(diffMeth, comparison, "cpgislands", return.data.frame = TRUE)
+tab.promoters <- get.table(diffMeth, comparison, "promoters", return.data.frame = TRUE)
+tab.genes <- get.table(diffMeth, comparison, "genes", return.data.frame = TRUE)
+
+
+
 ```
 
 
