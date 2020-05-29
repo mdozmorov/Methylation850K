@@ -65,7 +65,7 @@ if (runImport) {
   write.csv(bvalues, file.path(data.dir, "bvalues.csv"))
   system(paste0("gzip", file.path(data.dir, "bvalues.csv"))) # gzip because the file is large
 } else {
-  bvalues <- read_csv(file.path(data.dir, "bvalues.csv.qz")) %>% as.data.frame()
+  bvalues <- read_csv(file.path(data.dir, "bvalues.csv.gz")) %>% as.data.frame()
 }
 ```
 
