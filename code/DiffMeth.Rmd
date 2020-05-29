@@ -55,8 +55,9 @@ if (runImport) {
   rnb.set.unfiltered <- rnb.set
   result <- rnb.run.preprocessing(rnb.set, dir.reports=report.dir)
   rnb.set.norm <- result$rnb.set
+  save(list = c("rnb.set.norm"), file = filename)
 } else {
-  load(file = fileName)
+  load(file = filename)
 }
 
 ```
