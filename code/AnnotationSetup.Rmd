@@ -59,13 +59,11 @@ tryCatch(
 ```{r}
 myIdatName   = read.csv(sample2idat)
 myIdentifier = read.csv(description2sample)
-# Fix incompatibility with column name with and without space
-colnames(myIdentifier)[colnames(myIdentifier) == "Sample.Name"] <- "SampleName" 
 
 # Subset to common IDs
 common_id    <- intersect(myAnnotation$Identifier, myIdentifier$Description)
 myIdentifier <- myIdentifier[myIdentifier$Description %in% common_id, ]
-myIdatName   <- myIdatName[myIdatName$Sample %in% myIdentifier$SampleName, ]
+myIdatName   <- myIdatName[myIdatName$Sample %in% myIdentifier$Sample.Name, ]
 
 #Remove extra columns
 #myAnnotation <- myAnnotation[-c(41:125)]
@@ -75,7 +73,7 @@ myIdatName$barcode = paste(myIdatName$BeadChip, "_", myIdatName$SSR, myIdatName$
 # This seems like a bug. all.equal test fails 
 # myIdentifier = myIdentifier[order(myIdentifier$Sample.Name), ] # Had to add "."
 # all.equal(myIdentifier$Sample.Name, myIdatName$Sample)
-myIdentifier <- myIdentifier[match(myIdatName$Sample, myIdentifier$SampleName), ]
+myIdentifier <- myIdentifier[match(myIdatName$Sample, myIdentifier$Sample.Name), ]
 all.equal(myIdentifier$Sample.Name, myIdatName$Sample) # TRUE if order matches
 #Replace column with corresponding IDs that will be found in myAnnotation 
 myIdatName$Sample <- myIdentifier$Description
