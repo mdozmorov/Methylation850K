@@ -1,10 +1,7 @@
 # ToDo
 
-- Fill in annotation information for B visits. Currently, Race, Age etc for B visits are empty. Should be the same as A visits. Modify `AnnotationSetup.Rmd` (Completed)
-
-- Audomate `DiffMeth.Rmd` to avoid re-importing the data when rerunning the code (Completed)
-
-- Repeat the `DiffMeth.Rmd` analysis with the filled race and age covariates (Completed)
+- Repeat the `DiffMeth.Rmd` analysis with the filled race and age covariates
+    - Find out why, fix: WARNING         Invalid pairing information for column Visit . --> Treating as unpaired.
 
 - From `DiffMeth.Rmd`, we need
     - Diff. meth. CpGs
