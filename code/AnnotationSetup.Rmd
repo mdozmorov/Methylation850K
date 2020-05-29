@@ -42,7 +42,7 @@ myAnnotation = read_xlsx(sample.annotation)
 
 IDCount = 1
 tryCatch(
-  for (ID in myAnnotation$ID) {
+  for (ID in unique(myAnnotation$ID)) { # Go through unique IDs only
     if (myAnnotation$ID[IDCount] == myAnnotation$ID[IDCount + 1]) {
       myAnnotation$Age[IDCount + 1] <- myAnnotation$Age[IDCount]
       myAnnotation$Race[IDCount + 1] <- myAnnotation$Race[IDCount]
