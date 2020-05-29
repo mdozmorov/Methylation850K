@@ -54,11 +54,13 @@ tryCatch(
 )
 ```
 
-#Creation of a Sample Annotation file that matches IDs of Idat files
+# Creation of a Sample Annotation file that matches IDs of Idat files
 
 ```{r}
 myIdatName   = read.csv(sample2idat)
 myIdentifier = read.csv(description2sample)
+# Fix incompatibility with column name with and without space
+colnames(myIdentifier)[colnames(myIdentifier) == "Sample.Name"] <- "SampleName" 
 
 # Subset to common IDs
 common_id    <- intersect(myAnnotation$Identifier, myIdentifier$Description)
