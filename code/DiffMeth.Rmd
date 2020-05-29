@@ -23,6 +23,7 @@ options(stringsAsFactors = FALSE)
 
 ```{r libraries}
 library (RnBeads)
+library(writexl)
 ```
 
 ```{r settings}
@@ -31,9 +32,11 @@ data.dir           = "/Users/lucasrizkalla/Desktop/Methylation Research-VCU/Meth
 # Mikhail's path
 # data.dir           = "/Users/mdozmorov/Documents/Data/VCU_work/Lathika"
 
-runImport = TRUE
+runImport = FALSE
 idat.dir           = file.path(data.dir, "idats")
 sample.annot.abrev = file.path(data.dir, "Sample_Annot_Abrev.csv" )
+
+fileNameOut1       = file.path(data.dir, "Differential_Methylation.xlsx")
 ```
 
 # Data Import, QC, Preprocessing, and Norm
@@ -76,8 +79,10 @@ tab.cpgislands <- get.table(diffMeth, comparison, "cpgislands", return.data.fram
 tab.promoters <- get.table(diffMeth, comparison, "promoters", return.data.frame = TRUE)
 tab.genes <- get.table(diffMeth, comparison, "genes", return.data.frame = TRUE)
 
-
-
+# Save all results
+# Note the full results make ~200Mb xlsx
+x <- list(tab.sites, tab.cpgislands, tab.promoters, tab.genes)
+write_xlsx(x, path = fileNameOut1)
 ```
 
 
