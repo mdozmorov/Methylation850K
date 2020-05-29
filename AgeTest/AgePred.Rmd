@@ -189,7 +189,7 @@ groupBIndex = c()
 IDCount = 1
 index = 1
 tryCatch(
-  for (ID in sample.annotation$ID) {
+  for (ID in unique(sample.annotation$ID)) {
     if (sample.annotation$ID[IDCount] == sample.annotation$ID[IDCount + 1]) {
       groupAIndex[index] <- IDCount
       groupBIndex[index] <- IDCount + 1
