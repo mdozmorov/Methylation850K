@@ -3,11 +3,11 @@ title: "Age Prediction"
 author: "Lucas Rizkalla"
 date: "`r Sys.Date()`"
 output:
-  pdf_document:
-    toc: no
   html_document:
     theme: cerulean
     toc: yes
+  pdf_document:
+    toc: no
 ---
 
 ```{r setup, echo=FALSE, message=FALSE, warning=FALSE}
@@ -42,6 +42,7 @@ sample.annotation = file.path(data.dir, "Sample_Annot_Abrev.csv")
 ```
 
 # RnBeads Data Import and Generate Bvalues 
+In order to run our age prediction data using the Horvath script previously published, the methylation data was first imported and processed using RnBeads. The result of this process generated a table of beta values which were used in the following code.
 ```{r}
 if (runImport) {
   logger.start(fname=NA)
@@ -80,7 +81,7 @@ datClock=read.csv("AdditionalFile3.csv")
 ```
 
 # Read in the DNA methylation data (beta values)
-
+Horvath code, with our inputed beta values for analysis
 ```{r}
 # dat0=read.csv.sql("MethylationDataExample55.csv")
 dat0     = bvalues # Imported, or loaded precalculated
@@ -162,13 +163,13 @@ source("StepwiseAnalysis.R")
 ```
 
 # STEP 4: Output the results 
-
 ```{r}
 if ( sum( datout$Comment != "" ) ==0 ) { cat(paste( "\n The individual samples appear to be fine.
 "),file="LogFile.txt",append=TRUE) }
 if ( sum( datout$Comment != "" ) >0 ) { cat(paste( "\n Warnings were generated for the following samples.\n",
 datout[,1][datout$Comment != ""], "\n Hint: Check the output file for more details."),file="LogFile.txt",append=TRUE) }
 
+print(datout)
 # output the results into the directory
 write.table(datout, file.path(data.dir, "Horvath_Output.csv"), row.names=F, sep="," )
 ```
@@ -209,6 +210,7 @@ for (i in 1:length(groupAIndex)){
   i = i + 1
 }
 
+quartz()
 p + theme(axis.text=element_text(size=28), axis.title=element_text(size=32,face="bold")) + scale_y_continuous(breaks=seq(20,70,5))
 
 ```
@@ -219,17 +221,25 @@ ageDifference <- sample.annotation$Age - sample.annotation$DNAmAge
 sample.annotation <- sample.annotation %>%add_column("AgeDifference" = ageDifference, .after = "DNAmAge")
 
 quartz()
+print("Comparison of predicted vs. actual age of patients at both visits, as well as correlation calculation using Pearson correlation & Wilcoxon signed rank test.")
 plot(x = sample.annotation$Age, y = sample.annotation$DNAmAge, col = "blue", xaxt = "none", yaxt = "none", xlab = "Actual", ylab = "Predicted", cex = 1, pch = 16, font = 2, cex.lab = 1.3) + mtext(side = 3, line = 1, "Predicted Vs Actual Age (Both Visits)", font = 2, cex = 1.5) + axis(1, seq(10, 70, 5), cex = 1) + axis(2, seq(10,70,5), las=2) + abline(lm(sample.annotation$DNAmAge ~ sample.annotation$Age))
-cor(sample.annotation$Age, sample.annotation$DNAmAge)
+cor.test(sample.annotation$Age, sample.annotation$DNAmAge)
+wilcox.test(sample.annotation$Age, sample.annotation$DNAmAge, paired = TRUE, alternative = "two.sided")
 
 quartz()
+print("Comparison of predicted vs. actual age of patient at visit A, as well as correlation calculation using Pearson correlation & Wilcoxon signed rank test.")
 plot (x = sample.annotation$Age[groupAIndex], y = sample.annotation$DNAmAge[groupAIndex], col = "green", xaxt = "none", yaxt = "none", xlab = "Actual", ylab = "Predicted", cex = 1, pch = 16, font = 2, cex.lab = 1.3) + mtext(side = 3, line = 1, "Predicted Vs Actual Age (Visit A)", font = 2, cex = 1.5) + axis(1, seq(10, 70, 5), cex = 1) + axis(2, seq(10,70,5), las=2) + abline(lm(sample.annotation$DNAmAge[groupAIndex]~sample.annotation$Age[groupAIndex]))
-cor(sample.annotation$Age[groupAIndex], sample.annotation$DNAmAge[groupAIndex])
+cor.test(sample.annotation$Age[groupAIndex], sample.annotation$DNAmAge[groupAIndex])
+wilcox.test(sample.annotation$Age[groupAIndex], sample.annotation$DNAmAge[groupAIndex], paired = TRUE, alternative = "two.sided")
 
 quartz()
+print("Comparison of predicted vs. actual age of patient at visit B, as well as correlation calculation using Pearson correlation & Wilcoxon signed rank test.")
 plot (x = sample.annotation$Age[groupBIndex], y = sample.annotation$DNAmAge[groupBIndex], col = "red", xaxt = "none", yaxt = "none", xlab = "Actual", ylab = "Predicted", cex = 1, pch = 16, font = 2, cex.lab = 1.3) + mtext(side = 3, line = 1, "Predicted Vs Actual Age (Visit B)", font = 2, cex = 1.5) + axis(1, seq(10, 70, 5), cex = 1) + axis(2, seq(10,70,5), las=2) + abline(lm(sample.annotation$DNAmAge[groupBIndex]~sample.annotation$Age[groupBIndex]))
-cor(sample.annotation$Age[groupBIndex], sample.annotation$DNAmAge[groupBIndex])
+cor.test(sample.annotation$Age[groupBIndex], sample.annotation$DNAmAge[groupBIndex])
+wilcox.test(sample.annotation$Age[groupBIndex], sample.annotation$DNAmAge[groupBIndex], paired = TRUE, alternative = "two.sided")
 
+print("Comparison of predicted age between visit A and B using Wilcoxon signed rank test.")
+wilcox.test(sample.annotation$DNAmAge[groupAIndex], sample.annotation$DNAmAge[groupBIndex], paired = TRUE, alternative = "two.sided")
 ```
 
 ```{r session_info}
