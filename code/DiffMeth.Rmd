@@ -30,7 +30,7 @@ library (writexl)
 # Lucas's path
 data.dir           = "/Users/lucasrizkalla/Desktop/Methylation Research-VCU/Methylation850K/data"
 # Mikhail's path
-# data.dir           = "/Users/mdozmorov/Documents/Data/VCU_work/Lathika"
+data.dir           = "/Users/mdozmorov/Documents/Data/VCU_work/Lathika"
 
 runImport = TRUE
 idat.dir           = file.path(data.dir, "idats")
@@ -52,6 +52,7 @@ if (runImport) {
                                 data.type="idat.dir")
   
   report.dir = file.path(data.dir, "AgeReport")
+  unlink(report.dir, recursive = TRUE) # Delete previous report, if exists, otherwise error
   rnb.run.qc(rnb.set, report.dir)
   
   rnb.set.unfiltered <- rnb.set
