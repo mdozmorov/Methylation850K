@@ -14,8 +14,11 @@
 
 
 - From `AgePred.Rmd`, we need
-    - Test whether the predicted age is significantly different from the actual age. Separately at A and B visits. Wilcoxon test
-    - Test whether the predicted age differs between A and B visits (actual is unchanged). Wilcoxon test
+    + Test whether the predicted age is significantly different from the actual age. Separately at A and B visits. Wilcoxon test
+    + Test whether the predicted age differs between A and B visits (actual is unchanged). Wilcoxon test
+    - For each subsection in "Anaylysing Difference in Predicted Age" section, write summary/interpretation of the results:
+        - High correlation is obvious, just summarize in words
+        - Wilcoxon differences - is the average predicted age higher or lower the actual age? How much?
 
 - Cell type inference, to be used as covariates
 
