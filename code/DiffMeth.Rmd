@@ -68,6 +68,9 @@ if (runImport) {
 # Pairwise Analysis
 
 ```{r}
+# ??? Check if the "Visits" column is factor data
+# ??? The warning is still present, Invalid pairing information for column Visit . --> Treating as unpaired.
+# Subset data to pairs of samples only, make sure the test runs as paired
 rnb.options("differential.comparison.columns"=c("Visit"),"columns.pairing"=c("Visit"="ID"))
 rnb.options("covariate.adjustment.columns"=c("Race", "Age"))
 
@@ -84,17 +87,28 @@ tab.genes <- get.table(diffMeth, comparison, "genes", return.data.frame = TRUE)
 annot.sites <- annotation(rnb.set.norm)
 probe.id <- rownames(annot.sites)
 
-dm.ps <- tab.sites[order(tab.sites[, "combinedRank"]), ]
+# ??? Your solution works but it is fragile. A more robust and simple code below. 
+# Note we 'assume' the original order is the same, but need some proof
+dm.ps <- data.frame("ProbeID" = probe.id, tab.sites)
+# dm.ps <- tab.sites[order(tab.sites[, "combinedRank"]), ]
+dm.ps <- dm.ps[order(dm.ps$combinedRank, decreasing = FALSE), ]
 which.diffmeth <- abs(dm.ps[, "mean.diff"])>0.2 & dm.ps$diffmeth.p.adj.fdr<0.05
 dm.ps.cutoff <- dm.ps[which.diffmeth, ]
-dm.ps.id <- as.integer(rownames(dm.ps.cutoff))
-dm.ps.cutoff.probes <- {}
-index = 1
-while (index < length(dm.ps.id) + 1){
-  dm.ps.cutoff.probes[index] = probe.id[dm.ps.id[index]]
-  index = index + 1
-}
-dm.ps.cutoff <- dm.ps.cutoff %>% add_column("ProbeID" = dm.ps.cutoff.probes, .before = "mean.g1")
+# dm.ps.id <- as.integer(rownames(dm.ps.cutoff))
+# dm.ps.cutoff.probes <- {}
+# index = 1
+# while (index < length(dm.ps.id) + 1){
+#   dm.ps.cutoff.probes[index] = probe.id[dm.ps.id[index]]
+#   index = index + 1
+# }
+# dm.ps.cutoff <- dm.ps.cutoff %>% add_column("ProbeID" = dm.ps.cutoff.probes, .before = "mean.g1")
+
+# ??? Row IDs will be different for CpG islands, promoters, genes. Find out shich ones.
+# Should be the same number of rows as the corresponding object
+# Probe IDs cannot be used, they are for individual probes. The below errors
+dm.cpgs <- data.frame("ProbeID" = probe.id, tab.cpgislands)
+nrow(tab.cpgislands) # Find annotation with this number of rows
+length(probe.id)
 
 dm.cpgs <- tab.cpgislands[order(tab.cpgislands[, "combinedRank"]),]
 dm.cpgs.id <- as.integer(rownames(dm.cpgs))
@@ -139,11 +153,14 @@ write_xlsx(x, path = fileNameOut1)
 rnb.options("differential.enrichment.go"=TRUE)
 rnb.options("differential.enrichment.lola"=TRUE)
 
+# ??? Info message to look into: Not annotated with entrezID --> Skipped
 enrich.go <- performGoEnrichment.diffMeth(rnb.set.norm, diffMeth, verbose=TRUE)
 
+# ??? Why those parameters were used for subsetting? What are other options that may be informative? Why they were not selected?
 enrich.table.go <- enrich.go[["region"]][[comparison]][["BP"]][["promoters"]][["rankCut_500"]][["hypo"]]
 summary(enrich.table.go)
 
+# ??? Same with LOLA analysis - what informative results we can get from there?
 lolaDest <- tempfile()
 dir.create(lolaDest)
 lolaDirs <- downloadLolaDbs(lolaDest, dbs="LOLACore")

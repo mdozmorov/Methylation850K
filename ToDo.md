@@ -7,11 +7,9 @@
 
 
 - From `DiffMeth.Rmd`, we need
-    - Diff. meth. CpGs
-    - Diff. meth. regions
-    - Gene set enrichment
-    - Region set enrichment
-
+    - Find correct row IDs for tab.cpgislands, tab.promoters, tab.genes
+    - Are there different functions to run Gene set enrichment and Region set enrichment?
+    - What biological stories can we get from enrichment analyses?
 
 - From `AgePred.Rmd`, we need
     + Test whether the predicted age is significantly different from the actual age. Separately at A and B visits. Wilcoxon test
@@ -21,6 +19,11 @@
         - Wilcoxon differences - is the average predicted age higher or lower the actual age? How much?
 
 - Cell type inference, to be used as covariates
+
+## Potential concerns
+
+- When importing the data, "No methods found in package ‘RSQLite’ for request: ‘dbListFields’ when loading ‘lumi’
+Sentrix position model failed, skipping"
 
 
 # General
