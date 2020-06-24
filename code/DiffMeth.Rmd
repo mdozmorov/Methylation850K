@@ -23,7 +23,7 @@ options(stringsAsFactors = FALSE)
 
 ```{r libraries}
 library (RnBeads)
-library(writexl)
+library (writexl)
 ```
 
 ```{r settings}
@@ -32,7 +32,7 @@ data.dir           = "/Users/lucasrizkalla/Desktop/Methylation Research-VCU/Meth
 # Mikhail's path
 # data.dir           = "/Users/mdozmorov/Documents/Data/VCU_work/Lathika"
 
-runImport = FALSE
+runImport = TRUE
 idat.dir           = file.path(data.dir, "idats")
 sample.annot.abrev = file.path(data.dir, "Sample_Annot_Abrev.csv" )
 
@@ -42,13 +42,12 @@ fileNameOut1       = file.path(data.dir, "Differential_Methylation.xlsx")
 # Data Import, QC, Preprocessing, and Norm
 
 ```{r}
-filename = file.path(data.dir, "preprocessed_data.Rdata")
+filename = file.path(data.dir, "preprocessed_data.RData")
   
 if (runImport) {
   logger.start(fname=NA)
   data.source <- c(idat.dir, sample.annot.abrev)
-  rnb.options(inference.age.column="Age")
-  
+
   rnb.set <- rnb.execute.import(data.source=data.source,
                                 data.type="idat.dir")
   
@@ -74,15 +73,79 @@ rnb.options("covariate.adjustment.columns"=c("Race", "Age"))
 diffMeth <- rnb.execute.computeDiffMeth(rnb.set.norm, pheno.cols = "Visit")
 comparison <- get.comparisons(diffMeth)[1]
 
+get.comparisons(diffMeth)
+
 tab.sites <- get.table(diffMeth, comparison, "sites", return.data.frame = TRUE)
 tab.cpgislands <- get.table(diffMeth, comparison, "cpgislands", return.data.frame = TRUE)
 tab.promoters <- get.table(diffMeth, comparison, "promoters", return.data.frame = TRUE)
 tab.genes <- get.table(diffMeth, comparison, "genes", return.data.frame = TRUE)
 
+annot.sites <- annotation(rnb.set.norm)
+probe.id <- rownames(annot.sites)
+
+dm.ps <- tab.sites[order(tab.sites[, "combinedRank"]), ]
+which.diffmeth <- abs(dm.ps[, "mean.diff"])>0.2 & dm.ps$diffmeth.p.adj.fdr<0.05
+dm.ps.cutoff <- dm.ps[which.diffmeth, ]
+dm.ps.id <- as.integer(rownames(dm.ps.cutoff))
+dm.ps.cutoff.probes <- {}
+index = 1
+while (index < length(dm.ps.id) + 1){
+  dm.ps.cutoff.probes[index] = probe.id[dm.ps.id[index]]
+  index = index + 1
+}
+dm.ps.cutoff <- dm.ps.cutoff %>% add_column("ProbeID" = dm.ps.cutoff.probes, .before = "mean.g1")
+
+dm.cpgs <- tab.cpgislands[order(tab.cpgislands[, "combinedRank"]),]
+dm.cpgs.id <- as.integer(rownames(dm.cpgs))
+dm.cpgs.probes <- {}
+index = 1
+while (index < length(dm.cpgs.id) + 1){
+  dm.cpgs.probes[index] = probe.id[dm.ps.id[index]]
+  index = index + 1
+}
+dm.cpgs <- dm.cpgs %>% add_column("ProbeID" = dm.cpgs.probes, .before = "mean.mean.g1")
+
+dm.proms <- tab.promoters[order(tab.promoters[, "combinedRank"]),]
+dm.proms.id <- as.integer(rownames(dm.proms))
+dm.proms.probes <- {}
+index = 1
+while (index < length(dm.proms.id) + 1){
+  dm.proms.probes[index] = probe.id[dm.proms.id[index]]
+  index = index + 1
+}
+dm.proms <- dm.proms %>% add_column("ProbeID" = dm.proms.probes, .before = "mean.mean.g1")
+
+dm.gs <- tab.genes[order(tab.genes[, "combinedRank"]),]
+dm.gs.id <- as.integer(rownames(dm.gs))
+dm.gs.probes <- {}
+index = 1
+while (index < length(dm.gs.id) + 1){
+  dm.gs.probes[index] = probe.id[dm.gs.id[index]]
+  index = index + 1
+}
+dm.gs <- dm.gs %>% add_column("ProbeID" = dm.gs.probes, .before = "mean.mean.g1")
+
 # Save all results
 # Note the full results make ~200Mb xlsx
-x <- list(tab.sites, tab.cpgislands, tab.promoters, tab.genes)
+x <- list(dm.ps.cutoff, dm.cpgs, dm.proms, dm.gs) 
+names(x) <- c("Sites", "Cpgs", "Promoters", "Genes")
 write_xlsx(x, path = fileNameOut1)
+```
+
+#Enrichment Analysis
+
+```{r}
+rnb.options("differential.enrichment.go"=TRUE)
+rnb.options("differential.enrichment.lola"=TRUE)
+
+enrich.go <- performGoEnrichment.diffMeth(rnb.set.norm, diffMeth, verbose=TRUE)
+
+enrich.table.go <- enrich.go[["region"]][[comparison]][["BP"]][["promoters"]][["rankCut_500"]][["hypo"]]
+summary(enrich.table.go)
+
+lolaDest <- tempfile()
+dir.create(lolaDest)
+lolaDirs <- downloadLolaDbs(lolaDest, dbs="LOLACore")
 ```
 
 
