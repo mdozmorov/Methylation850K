@@ -94,11 +94,41 @@ mySampleAnnotation <- write.csv(myAnnotation, file = file.path(data.dir, "Sample
 
 ```{r}
 sample.annotation = read.csv(file = file.path(data.dir, "Sample_Annotation.csv"))
-sample.annotation = sample.annotation[order(sample.annotation$barcode),] 
 sample.annotation[1:23, "barcode"] # From "204297420086_R01C01" to "204297420148_R07C01"
 sample.annot.abrev = sample.annotation[1:23,]
 sample.annot.abrev <- sample.annot.abrev[-c(1)] # First column is unnecessary
+sample.annot.abrev
 write.csv(sample.annot.abrev, file = file.path(data.dir, "Sample_Annot_Abrev.csv"))
+```
+
+#Remove Unpaired Data
+
+```{r}
+sample.annotation = read.csv(file = file.path(data.dir, "Sample_Annot_Abrev.csv"))
+sample.annotation = sample.annotation[order(sample.annotation$ID),] 
+
+columns <- paste(colnames(sample.annotation))
+sample.annot.filtered = as.data.frame(matrix(0, ncol = 41, nrow=0))
+names(sample.annot.filtered) <- columns
+
+IDCount = 1
+index = 1
+tryCatch(
+  for (ID in sample.annotation$ID) { # Go through unique IDs only
+    if (sample.annotation$ID[IDCount] == sample.annotation$ID[IDCount + 1]) {
+      sample.annot.filtered[index, ] <- sample.annotation[IDCount, ]
+      sample.annot.filtered[index + 1, ] <- sample.annotation[IDCount + 1, ]
+  }
+  IDCount = IDCount + 1
+  index = index + 1
+  }, error = function(cond) {
+    message()
+  }
+)
+
+sample.annot.filtered = sample.annot.filtered[-1,-1]
+sample.annot.filtered
+write.csv(sample.annot.filtered, file = file.path(data.dir, "Sample_Annot_Filt.csv"))
 ```
 
 
