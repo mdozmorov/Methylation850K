@@ -24,6 +24,7 @@ options(stringsAsFactors = FALSE)
 ```{r libraries}
 library (RnBeads)
 library (writexl)
+library (openxlsx)
 ```
 
 ```{r settings}
@@ -31,11 +32,9 @@ library (writexl)
 data.dir           = "/Users/lucasrizkalla/Desktop/Methylation Research-VCU/Methylation850K/data"
 # Mikhail's path
 data.dir           = "/Users/mdozmorov/Documents/Data/VCU_work/Lathika"
-
 runImport = TRUE
 idat.dir           = file.path(data.dir, "idats")
-sample.annot.abrev = file.path(data.dir, "Sample_Annot_Abrev.csv" )
-
+sample.annot.abrev = file.path(data.dir, "Sample_Annot_Filt.csv" )
 fileNameOut1       = file.path(data.dir, "Differential_Methylation.xlsx")
 ```
 
@@ -47,7 +46,6 @@ filename = file.path(data.dir, "preprocessed_data.RData")
 if (runImport) {
   logger.start(fname=NA)
   data.source <- c(idat.dir, sample.annot.abrev)
-
   rnb.set <- rnb.execute.import(data.source=data.source,
                                 data.type="idat.dir")
   
@@ -62,7 +60,6 @@ if (runImport) {
 } else {
   load(file = filename)
 }
-
 ```
 
 # Pairwise Analysis
@@ -74,77 +71,147 @@ if (runImport) {
 rnb.options("differential.comparison.columns"=c("Visit"),"columns.pairing"=c("Visit"="ID"))
 rnb.options("covariate.adjustment.columns"=c("Race", "Age"))
 
-diffMeth <- rnb.execute.computeDiffMeth(rnb.set.norm, pheno.cols = "Visit")
+diffMeth <- rnb.computeDiffMeth(rnb.set.norm, pheno.cols = "Visit")
 comparison <- get.comparisons(diffMeth)[1]
-
 get.comparisons(diffMeth)
+```
 
-tab.sites <- get.table(diffMeth, comparison, "sites", return.data.frame = TRUE)
-tab.cpgislands <- get.table(diffMeth, comparison, "cpgislands", return.data.frame = TRUE)
-tab.promoters <- get.table(diffMeth, comparison, "promoters", return.data.frame = TRUE)
-tab.genes <- get.table(diffMeth, comparison, "genes", return.data.frame = TRUE)
+##Plotting Differential Methylation Comparison at the Site Level
 
-annot.sites <- annotation(rnb.set.norm)
-probe.id <- rownames(annot.sites)
+### Volcano Plot for Differential Methylation (sites)
+```{r}
+diff.meth.sites <- get.table(diffMeth, comparison, "sites", return.data.frame = TRUE)
+quartz()
+plot(diff.meth.sites[, "mean.diff"], -log10(diff.meth.sites[, "diffmeth.p.val"]), xlab="mean difference", ylab="-log10(diffmeth p-value)", col="blue")
+```
 
-# ??? Your solution works but it is fragile. A more robust and simple code below. 
-# Note we 'assume' the original order is the same, but need some proof
-dm.ps <- data.frame("ProbeID" = probe.id, tab.sites)
-# dm.ps <- tab.sites[order(tab.sites[, "combinedRank"]), ]
-dm.ps <- dm.ps[order(dm.ps$combinedRank, decreasing = FALSE), ]
-which.diffmeth <- abs(dm.ps[, "mean.diff"])>0.2 & dm.ps$diffmeth.p.adj.fdr<0.05
-dm.ps.cutoff <- dm.ps[which.diffmeth, ]
-# dm.ps.id <- as.integer(rownames(dm.ps.cutoff))
-# dm.ps.cutoff.probes <- {}
-# index = 1
-# while (index < length(dm.ps.id) + 1){
-#   dm.ps.cutoff.probes[index] = probe.id[dm.ps.id[index]]
-#   index = index + 1
-# }
-# dm.ps.cutoff <- dm.ps.cutoff %>% add_column("ProbeID" = dm.ps.cutoff.probes, .before = "mean.g1")
+###Scatterplot for Differential Methylation (sites) with FDR adjusted p-value <0.05
+```{r}
+isDMS <- diff.meth.sites[,"diffmeth.p.adj.fdr"] < 0.05
+quartz()
+create.densityScatter(diff.meth.sites, is.special=isDMS, sparse.points=0.001, add.text.cor=TRUE) + labs(x="mean.beta.A", y="mean.beta.B") + coord_fixed()
+```
 
-# ??? Row IDs will be different for CpG islands, promoters, genes. Find out shich ones.
-# Should be the same number of rows as the corresponding object
-# Probe IDs cannot be used, they are for individual probes. The below errors
-dm.cpgs <- data.frame("ProbeID" = probe.id, tab.cpgislands)
-nrow(tab.cpgislands) # Find annotation with this number of rows
-length(probe.id)
+##Plotting Differential Methylation Comparison at the Region Level
 
-dm.cpgs <- tab.cpgislands[order(tab.cpgislands[, "combinedRank"]),]
-dm.cpgs.id <- as.integer(rownames(dm.cpgs))
-dm.cpgs.probes <- {}
-index = 1
-while (index < length(dm.cpgs.id) + 1){
-  dm.cpgs.probes[index] = probe.id[dm.ps.id[index]]
-  index = index + 1
-}
-dm.cpgs <- dm.cpgs %>% add_column("ProbeID" = dm.cpgs.probes, .before = "mean.mean.g1")
+###Volcano Plot for Differential Methylation (promoters)
+```{r}
+diff.meth.proms <- get.table(diffMeth, comparison, "promoters", return.data.frame = TRUE)
+quartz()
+plot(diff.meth.prom[, "mean.mean.diff"], -log10(diff.meth.prom[, "comb.p.val"]), xlab="mean difference", ylab="-log10(combined p-value)", col="blue")
+```
 
-dm.proms <- tab.promoters[order(tab.promoters[, "combinedRank"]),]
-dm.proms.id <- as.integer(rownames(dm.proms))
-dm.proms.probes <- {}
-index = 1
-while (index < length(dm.proms.id) + 1){
-  dm.proms.probes[index] = probe.id[dm.proms.id[index]]
-  index = index + 1
-}
-dm.proms <- dm.proms %>% add_column("ProbeID" = dm.proms.probes, .before = "mean.mean.g1")
+###Scatterplot for Differential Methylation (promoters) with Combined Rank among 100 best 
+```{r}
+diff.meth.proms.ordered <- diff.meth.proms[order(diff.meth.proms$combinedRank, decreasing = FALSE), ]
+combinedRank100     <- diff.meth.proms.100$combinedRank[100]
+combinedRank500     <- diff.meth.proms.100$combinedRank[500]
 
-dm.gs <- tab.genes[order(tab.genes[, "combinedRank"]),]
-dm.gs.id <- as.integer(rownames(dm.gs))
-dm.gs.probes <- {}
-index = 1
-while (index < length(dm.gs.id) + 1){
-  dm.gs.probes[index] = probe.id[dm.gs.id[index]]
-  index = index + 1
-}
-dm.gs <- dm.gs %>% add_column("ProbeID" = dm.gs.probes, .before = "mean.mean.g1")
+isDMP <- diff.meth.proms.ordered[,"combinedRank"] <= combinedRank100
+quartz()
+create.densityScatter(diff.meth.proms, is.special=isDMP, sparse.points=0.001, add.text.cor=TRUE) + labs(x="mean.mean.beta.A", y="mean.mean.beta.B") + coord_fixed()
+```
+
+###Scatterplot for Differential Methylation (promoters) with Combined Rank among 500 best 
+```{r}
+isDMP <- diff.meth.proms.ordered[,"combinedRank"] <= combinedRank500
+quartz()
+create.densityScatter(diff.meth.proms, is.special=isDMP, sparse.points=0.001, add.text.cor=TRUE) + labs(x="mean.mean.beta.A", y="mean.mean.beta.B") + coord_fixed()
+```
+
+###Scatterplot for Differential Methylation (promoters) with FDR adjusted p-value <0.05 
+```{r}
+isDMP <- diff.meth.proms[,"comb.p.adj.fdr"] < 0.05
+quartz()
+create.densityScatter(diff.meth.proms, is.special=isDMP, sparse.points=0.001, add.text.cor=TRUE) + labs(x="mean.mean.beta.A", y="mean.mean.beta.B") + coord_fixed()
+```
+
+###Volcano Plot for Differential Methylation (genes)
+```{r}
+diff.meth.genes <- get.table(diffMeth, comparison, "genes", return.data.frame = TRUE)
+quartz()
+plot(diff.meth.genes[, "mean.mean.diff"], -log10(diff.meth.genes[, "comb.p.val"]), xlab="mean difference", ylab="-log10(combined p-value)", col="blue")
+```
+
+###Scatterplot for Differential Methylation (genes) with Combined Rank among 100 best 
+```{r}
+diff.meth.genes.ordered <- diff.meth.genes[order(diff.meth.genes$combinedRank, decreasing = FALSE), ]
+combinedRank100     <- diff.meth.genes.100$combinedRank[100]
+combinedRank500     <- diff.meth.genes.100$combinedRank[500]
+
+isDMG <- diff.meth.genes.ordered[,"combinedRank"] <= combinedRank100
+quartz()
+create.densityScatter(diff.meth.genes, is.special=isDMG, sparse.points=0.001, add.text.cor=TRUE) + labs(x="mean.mean.beta.A", y="mean.mean.beta.B") + coord_fixed()
+
+```
+
+###Scatterplot for Differential Methylation (genes) with Combined Rank among 500 best 
+```{r}
+isDMG <- diff.meth.genes.ordered[,"combinedRank"] <= combinedRank500
+quartz()
+create.densityScatter(diff.meth.genes, is.special=isDMG, sparse.points=0.001, add.text.cor=TRUE) + labs(x="mean.mean.beta.A", y="mean.mean.beta.B") + coord_fixed()
+```
+
+###Scatterplot for Differential Methylation (promoters) with FDR adjusted p-value <0.05 
+```{r}
+isDMG <- diff.meth.genes[,"comb.p.adj.fdr"] < 0.05
+quartz()
+create.densityScatter(diff.meth.genes, is.special=isDMG, sparse.points=0.001, add.text.cor=TRUE) + labs(x="mean.mean.beta.A", y="mean.mean.beta.B") + coord_fixed()
+```
+
+###Volcano Plot for Differential Methylation (CpGIslands)
+```{r}
+diff.meth.cpgs <- get.table(diffMeth, comparison, "cpgislands", return.data.frame = TRUE)
+quartz()
+plot(diff.meth.cpgs[, "mean.mean.diff"], -log10(diff.meth.cpgs[, "comb.p.val"]), xlab="mean difference", ylab="-log10(combined p-value)", col="blue")
+```
+
+###Scatterplot for Differential Methylation (CpGIslands) with Combined Rank among 100 best 
+```{r}
+diff.meth.cpgs.ordered <- diff.meth.cpgs[order(diff.meth.cpgs$combinedRank, decreasing = FALSE), ]
+combinedRank100     <- diff.meth.cpgs.100$combinedRank[100]
+combinedRank500     <- diff.meth.cpgs.100$combinedRank[500]
+
+isDMC <- diff.meth.cpgs.ordered[,"combinedRank"] <= combinedRank100
+quartz()
+create.densityScatter(diff.meth.cpgs, is.special=isDMC, sparse.points=0.001, add.text.cor=TRUE) + labs(x="mean.mean.beta.A", y="mean.mean.beta.B") + coord_fixed()
+```
+
+###Scatterplot for Differential Methylation (CpGIslands) with Combined Rank among 500 best 
+```{r}
+isDMC <- diff.meth.cpgs.ordered[,"combinedRank"] <= combinedRank500
+quartz()
+create.densityScatter(diff.meth.cpgs, is.special=isDMC, sparse.points=0.001, add.text.cor=TRUE) + labs(x="mean.mean.beta.A", y="mean.mean.beta.B") + coord_fixed()
+```
+
+###Scatterplot for Differential Methylation (CpGIslands) with FDR adjusted p-value <0.05 
+```{r}
+isDMC <- diff.meth.cpgs[,"comb.p.adj.fdr"] < 0.05
+quartz()
+create.densityScatter(diff.meth.cpgs, is.special=isDMC, sparse.points=0.001, add.text.cor=TRUE) + labs(x="mean.mean.beta.A", y="mean.mean.beta.B") + coord_fixed()
+```
+
+#Output of Annotated Results
+```{r}
+sites.annot     <- annotation(rnb.set.norm, type="sites")
+promoter.annot  <- annotation(rnb.set.norm, type="promoters")
+genes.annot     <- annotation(rnb.set.norm, type ="genes")
+cpgisland.annot <- annotation(rnb.set.norm, type="cpgislands")
+
+annotated.diff.meth.sites <- data.frame(sites.annot, diff.meth.sites)
+annotated.diff.meth.proms <- data.frame(promoter.annot, diff.meth.proms)
+annotated.diff.meth.genes <- data.frame(genes.annot, diff.meth.genes)
+annotated.diff.meth.cpgs  <- data.frame(cpgisland.annot, diff.meth.cpgs)
+
+annotated.diff.meth.sites <- annotated.diff.meth.sites[order(annotated.diff.meth.sites$combinedRank, decreasing = FALSE), ]
+which.diffmeth <- abs(annotated.diff.meth.sites[, "mean.diff"])>0.2 & annotated.diff.meth.sites$diffmeth.p.adj.fdr<0.05
+annotated.diff.meth.sites <- annotated.diff.meth.sites[which.diffmeth, ]
 
 # Save all results
 # Note the full results make ~200Mb xlsx
-x <- list(dm.ps.cutoff, dm.cpgs, dm.proms, dm.gs) 
+x <- list(annotated.diff.meth.sites, annotated.diff.meth.cpgs, annotated.diff.meth.proms, annotated.diff.meth.genes)
 names(x) <- c("Sites", "Cpgs", "Promoters", "Genes")
-write_xlsx(x, path = fileNameOut1)
+write.xlsx(x, file = fileNameOut1, row.names = TRUE)
 ```
 
 #Enrichment Analysis
@@ -152,14 +219,11 @@ write_xlsx(x, path = fileNameOut1)
 ```{r}
 rnb.options("differential.enrichment.go"=TRUE)
 rnb.options("differential.enrichment.lola"=TRUE)
-
 # ??? Info message to look into: Not annotated with entrezID --> Skipped
 enrich.go <- performGoEnrichment.diffMeth(rnb.set.norm, diffMeth, verbose=TRUE)
-
 # ??? Why those parameters were used for subsetting? What are other options that may be informative? Why they were not selected?
 enrich.table.go <- enrich.go[["region"]][[comparison]][["BP"]][["promoters"]][["rankCut_500"]][["hypo"]]
 summary(enrich.table.go)
-
 # ??? Same with LOLA analysis - what informative results we can get from there?
 lolaDest <- tempfile()
 dir.create(lolaDest)
