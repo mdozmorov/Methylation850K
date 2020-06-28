@@ -58,28 +58,22 @@ tryCatch(
 
 ```{r}
 myIdatName   = read.csv(sample2idat)
-myIdentifier = read.csv(description2sample)
+myIdentifier = read.csv(description2sample, as.is = TRUE)
 
 # Subset to common IDs
 common_id    <- intersect(myAnnotation$Identifier, myIdentifier$Description)
 myIdentifier <- myIdentifier[myIdentifier$Description %in% common_id, ]
 myIdatName   <- myIdatName[myIdatName$Sample %in% myIdentifier$Sample.Name, ]
 
-#Remove extra columns
-#myAnnotation <- myAnnotation[-c(41:125)]
 #Create new column to be used as idat file name (SentrixID_SentrixPosition)
 myIdatName$barcode = paste(myIdatName$BeadChip, "_", myIdatName$SSR, myIdatName$SSC, sep = "")
 #Sort by SampleName in order to cross reference with Sample in myIdatName (should be identical in order)
-# This seems like a bug. all.equal test fails 
-# myIdentifier = myIdentifier[order(myIdentifier$Sample.Name), ] # Had to add "."
-# all.equal(myIdentifier$Sample.Name, myIdatName$Sample)
 myIdentifier <- myIdentifier[match(myIdatName$Sample, myIdentifier$Sample.Name), ]
 all.equal(myIdentifier$Sample.Name, myIdatName$Sample) # TRUE if order matches
 #Replace column with corresponding IDs that will be found in myAnnotation 
 myIdatName$Sample <- myIdentifier$Description
 
 #Sort in numerical order so that it correspond correctly to myAnnotation
-myIdatName = myIdatName[order(myIdatName$Sample), ] # Fragile, but in this case works
 myIdatName = myIdatName[match(myAnnotation$Identifier, myIdatName$Sample), ] # Works always
 all.equal(myIdatName$Sample, myAnnotation$Identifier) # TRUE if the same order
 #Once sorted, replaced with correct Idat file name
@@ -127,7 +121,6 @@ tryCatch(
 )
 
 sample.annot.filtered = sample.annot.filtered[-1,-1]
-sample.annot.filtered
 write.csv(sample.annot.filtered, file = file.path(data.dir, "Sample_Annot_Filt.csv"))
 ```
 
