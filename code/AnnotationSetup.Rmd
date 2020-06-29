@@ -102,8 +102,10 @@ sample.annotation = read.csv(file = file.path(data.dir, "Sample_Annot_Abrev.csv"
 sample.annotation = sample.annotation[order(sample.annotation$ID),] 
 
 columns <- paste(colnames(sample.annotation))
-sample.annot.filtered = as.data.frame(matrix(0, ncol = 41, nrow=0))
+numcol <- ncol(sample.annotation)
+sample.annot.filtered = as.data.frame(matrix(0, ncol = numcol, nrow=0))
 names(sample.annot.filtered) <- columns
+
 
 IDCount = 1
 index = 1
@@ -120,7 +122,7 @@ tryCatch(
   }
 )
 
-sample.annot.filtered = sample.annot.filtered[-1,-1]
+sample.annot.filtered = sample.annot.filtered[,-1]
 write.csv(sample.annot.filtered, file = file.path(data.dir, "Sample_Annot_Filt.csv"))
 ```
 
