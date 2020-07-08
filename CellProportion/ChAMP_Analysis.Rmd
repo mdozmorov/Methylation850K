@@ -1,0 +1,73 @@
+---
+title: "CellProportion"
+author: "Lucas Rizkalla"
+date: "`r Sys.Date()`"
+output:
+  pdf_document:
+    toc: no
+  html_document:
+    theme: cerulean
+    toc: yes
+---
+
+```{r setup, echo=FALSE, message=FALSE, warning=FALSE}
+# Set up the environment
+library(knitr)
+opts_chunk$set(cache.path='cache/', fig.path='img/', cache=F, tidy=T, fig.keep='high', echo=F, dpi=100, warnings=F, message=F, comment=NA, warning=F, results='as.is', fig.width = 10, fig.height = 6) #out.width=700, 
+library(pander)
+panderOptions('table.split.table', Inf)
+set.seed(1)
+library(dplyr)
+options(stringsAsFactors = FALSE)
+```
+
+```{r libraries}
+library (ChAMP)
+library (snow)
+library (openxlsx)
+```
+
+#Directory Setup
+
+Sample annotation file should be in the same folder as the idats in order for ChAMP to process them together.
+
+```{r settings}
+data.dir    = "/Users/lucasrizkalla/Desktop/Methylation Research-VCU/Methylation850K/data"
+idat.dir    = file.path(data.dir, "idats")
+fileNameOut = file.path(data.dir, "Gene_Set_Enrichment.xlsx")
+```
+
+```{r}
+myLoad <- champ.load(idat.dir, arraytype = "EPIC")
+myNorm <- champ.norm(arraytype = "EPIC")
+#myRefBase <- champ.refbase(beta=myNorm,arraytype="EPIC")
+
+myDMP <- champ.DMP(beta = myNorm, pheno = myLoad$pd$Visit)
+myDMR <- champ.DMR(beta = myNorm, pheno = myLoad$pd$Visit, arraytype = "EPIC", cores = 4, smooth = FALSE)
+DMP.GUI(DMP=myDMP[[1]], beta = myNorm, pheno = myLoad$pd$Visit)
+DMR.GUI(DMR=myDMR, beta = myNorm, pheno = myLoad$pd$Visit, arraytype = "EPIC")
+myGSEA <- champ.GSEA(beta=myNorm,DMP=myDMP[[1]], DMR=myDMR, arraytype="EPIC",adjPval=0.05, method="fisher")
+myEpiMod <- champ.EpiMod(beta = myNorm, pheno = myLoad$pd$Visit, arraytype = "EPIC")
+
+myDMP.output <- data.frame(myDMP)
+myDMR.output <- data.frame(myDMR)
+DMP.enrich <- data.frame(myGSEA$DMP)
+DMR.enrich <- data.frame(myGSEA$DMR)
+
+nrow(myDMP.output)
+nrow(myDMR.output)
+nrow(DMP.enrich)
+nrow(DMR.enrich)
+
+x <- list(myDMP, myDMR, DMP.enrich, DMR.enrich)
+names(x) <- c("DMPs", "DMRs", "DMP Enrichment", "DMR Enrichment")
+write.xlsx(x, file = fileNameOut, row.names = TRUE)
+
+#myRefBase$CellFraction
+#write.csv(myRefBase$CellFraction, "myRefBaseCT.csv")
+```
+
+
+```{r session_info}
+xfun::session_info()
+```
