@@ -23,6 +23,7 @@ options(stringsAsFactors = FALSE)
 
 ```{r libraries}
 library(readxl)
+library(tidyverse)
 ```
 
 ```{r settings}
@@ -66,20 +67,42 @@ myIdentifier <- myIdentifier[myIdentifier$Description %in% common_id, ]
 myIdatName   <- myIdatName[myIdatName$Sample %in% myIdentifier$Sample.Name, ]
 
 #Create new column to be used as idat file name (SentrixID_SentrixPosition)
+
+#For use in RnBeads
 myIdatName$barcode = paste(myIdatName$BeadChip, "_", myIdatName$SSR, myIdatName$SSC, sep = "")
+
+#For use in ChAMP
+#myIdatName$Sentrix_ID = myIdatName$BeadChip
+#myIdatName$Sentrix_Position = paste(myIdatName$SSR, myIdatName$SSC, sep = "")
+
+
 #Sort by SampleName in order to cross reference with Sample in myIdatName (should be identical in order)
 myIdentifier <- myIdentifier[match(myIdatName$Sample, myIdentifier$Sample.Name), ]
 all.equal(myIdentifier$Sample.Name, myIdatName$Sample) # TRUE if order matches
 #Replace column with corresponding IDs that will be found in myAnnotation 
 myIdatName$Sample <- myIdentifier$Description
 
+
 #Sort in numerical order so that it correspond correctly to myAnnotation
 myIdatName = myIdatName[match(myAnnotation$Identifier, myIdatName$Sample), ] # Works always
 all.equal(myIdatName$Sample, myAnnotation$Identifier) # TRUE if the same order
 #Once sorted, replaced with correct Idat file name
+
+##RnBeads annotation
 myAnnotation$Identifier <- myIdatName$barcode
-#Set column name to "barcode"
+
+##ChAMP annotation
+#myAnnotation$Identifier <- myIdatName$Sentrix_ID
+
+#Set column name to "barcode" for ChAMP
+#names(myAnnotation)[names(myAnnotation) == "Identifier"] <- "Sentrix_ID"
+#myAnnotation <- myAnnotation %>% add_column("Sentrix_Position" = myIdatName$Sentrix_Position, .after = "Sentrix_ID")
+
+#myAnnotation <- myAnnotation[order(myAnnotation$Sentrix_ID, myAnnotation$Sentrix_Position),]
+
+#Set column name to "barcode" for RnBeads
 names(myAnnotation)[names(myAnnotation) == "Identifier"] <- "barcode"
+
 
 mySampleAnnotation <- write.csv(myAnnotation, file = file.path(data.dir, "Sample_Annotation.csv"))
 ```
@@ -88,11 +111,13 @@ mySampleAnnotation <- write.csv(myAnnotation, file = file.path(data.dir, "Sample
 
 ```{r}
 sample.annotation = read.csv(file = file.path(data.dir, "Sample_Annotation.csv"))
+sample.annotation <- sample.annotation[order(sample.annotation$barcode),]
 sample.annotation[1:23, "barcode"] # From "204297420086_R01C01" to "204297420148_R07C01"
+#sample.annotation[1:23, "Sentrix_ID"] # From "204297420086_R01C01" to "204297420148_R07C01"
 sample.annot.abrev = sample.annotation[1:23,]
 sample.annot.abrev <- sample.annot.abrev[-c(1)] # First column is unnecessary
 sample.annot.abrev
-write.csv(sample.annot.abrev, file = file.path(data.dir, "Sample_Annot_Abrev.csv"))
+write.csv(sample.annot.abrev, file = file.path(data.dir, "Sample_Annot_Abrev.csv"), row.names = FALSE)
 ```
 
 #Remove Unpaired Data
@@ -122,8 +147,8 @@ tryCatch(
   }
 )
 
-sample.annot.filtered = sample.annot.filtered[,-1]
-write.csv(sample.annot.filtered, file = file.path(data.dir, "Sample_Annot_Filt.csv"))
+sample.annot.filtered <- sample.annot.filtered[-1,]
+write.csv(sample.annot.filtered, file = file.path(data.dir, "Sample_Annot_Filt.csv"), row.names = FALSE)
 ```
 
 
