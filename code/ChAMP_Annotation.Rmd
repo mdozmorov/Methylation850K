@@ -1,0 +1,148 @@
+---
+title: "Annotation Setup"
+author: "Lucas Rizkalla"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    theme: cerulean
+    toc: yes
+  pdf_document:
+    toc: no
+---
+
+```{r setup, echo=FALSE, message=FALSE, warning=FALSE}
+# Set up the environment
+library(knitr)
+opts_chunk$set(cache.path='cache/', fig.path='img/', cache=F, tidy=T, fig.keep='high', echo=F, dpi=100, warnings=F, message=F, comment=NA, warning=F, results='as.is', fig.width = 10, fig.height = 6) #out.width=700, 
+library(pander)
+panderOptions('table.split.table', Inf)
+set.seed(1)
+library(dplyr)
+options(stringsAsFactors = FALSE)
+```
+
+```{r libraries}
+library(readxl)
+library(tidyverse)
+```
+
+```{r settings}
+# Lucas's path
+data.dir           = "/Users/lucasrizkalla/Desktop/Methylation Research-VCU/Methylation850K/data"
+# Mikhail's path
+# data.dir           = "/Users/mdozmorov/Documents/Work/GitHub/Methylation850K/code"
+# Annotation files
+sample.annotation  = file.path(data.dir, "Sample_Annotation.xlsx")
+description2sample = file.path(data.dir, "library_ids_haib20TS6106.csv")
+sample2idat        = file.path(data.dir, "Sample_Table.csv")
+```
+
+# Fill out EXCEL File with remaining ages and race 
+```{r}
+myAnnotation = read_xlsx(sample.annotation)
+
+IDCount = 1
+tryCatch(
+  for (ID in myAnnotation$ID) { # Go through unique IDs only
+    if (myAnnotation$ID[IDCount] == myAnnotation$ID[IDCount + 1]) {
+      myAnnotation$Age[IDCount + 1] <- myAnnotation$Age[IDCount]
+      myAnnotation$Race[IDCount + 1] <- myAnnotation$Race[IDCount]
+  }
+  IDCount = IDCount + 1
+  }, error = function(cond) {
+    message()
+  }
+)
+```
+
+# Creation of a Sample Annotation file that matches IDs of Idat files
+
+```{r}
+myIdatName   = read.csv(sample2idat)
+myIdentifier = read.csv(description2sample, as.is = TRUE)
+
+# Subset to common IDs
+common_id    <- intersect(myAnnotation$Identifier, myIdentifier$Description)
+myIdentifier <- myIdentifier[myIdentifier$Description %in% common_id, ]
+myIdatName   <- myIdatName[myIdatName$Sample %in% myIdentifier$Sample.Name, ]
+
+#Create new column to be used as idat file name (SentrixID_SentrixPosition)
+
+
+
+myIdatName$Sentrix_ID = myIdatName$BeadChip
+myIdatName$Sentrix_Position = paste(myIdatName$SSR, myIdatName$SSC, sep = "")
+
+
+#Sort by SampleName in order to cross reference with Sample in myIdatName (should be identical in order)
+myIdentifier <- myIdentifier[match(myIdatName$Sample, myIdentifier$Sample.Name), ]
+all.equal(myIdentifier$Sample.Name, myIdatName$Sample) # TRUE if order matches
+#Replace column with corresponding IDs that will be found in myAnnotation 
+myIdatName$Sample <- myIdentifier$Description
+
+
+#Sort in numerical order so that it correspond correctly to myAnnotation
+myIdatName = myIdatName[match(myAnnotation$Identifier, myIdatName$Sample), ] # Works always
+all.equal(myIdatName$Sample, myAnnotation$Identifier) # TRUE if the same order
+#Once sorted, replaced with correct Idat file name
+
+
+myAnnotation$Identifier <- myIdatName$Sentrix_ID
+
+#Set column name to "barcode" for ChAMP
+names(myAnnotation)[names(myAnnotation) == "Identifier"] <- "Sentrix_ID"
+myAnnotation <- myAnnotation %>% add_column("Sentrix_Position" = myIdatName$Sentrix_Position, .after = "Sentrix_ID")
+
+myAnnotation <- myAnnotation[order(myAnnotation$Sentrix_ID, myAnnotation$Sentrix_Position),]
+
+
+mySampleAnnotation <- write.csv(myAnnotation, file = file.path(data.dir, "Sample_Annotation.csv"))
+```
+
+# Subset to currently available samples
+
+```{r}
+sample.annotation = read.csv(file = file.path(data.dir, "Sample_Annotation.csv"))
+sample.annotation <- sample.annotation[order(sample.annotation$Sentrix_ID),]
+sample.annotation[1:23, "Sentrix_ID"] # From "204297420086_R01C01" to "204297420148_R07C01"
+sample.annot.abrev = sample.annotation[1:23,]
+sample.annot.abrev <- sample.annot.abrev[-c(1)] # First column is unnecessary
+sample.annot.abrev
+write.csv(sample.annot.abrev, file = file.path(data.dir, "Sample_Annot_Abrev.csv"), row.names = FALSE)
+```
+
+#Remove Unpaired Data
+
+```{r}
+sample.annotation = read.csv(file = file.path(data.dir, "Sample_Annot_Abrev.csv"))
+sample.annotation = sample.annotation[order(sample.annotation$ID),] 
+
+columns <- paste(colnames(sample.annotation))
+numcol <- ncol(sample.annotation)
+sample.annot.filtered = as.data.frame(matrix(0, ncol = numcol, nrow=0))
+names(sample.annot.filtered) <- columns
+
+
+IDCount = 1
+index = 1
+tryCatch(
+  for (ID in sample.annotation$ID) { # Go through unique IDs only
+    if (sample.annotation$ID[IDCount] == sample.annotation$ID[IDCount + 1]) {
+      sample.annot.filtered[index, ] <- sample.annotation[IDCount, ]
+      sample.annot.filtered[index + 1, ] <- sample.annotation[IDCount + 1, ]
+  }
+  IDCount = IDCount + 1
+  index = index + 1
+  }, error = function(cond) {
+    message()
+  }
+)
+
+sample.annot.filtered <- sample.annot.filtered[-1,]
+write.csv(sample.annot.filtered, file = file.path(data.dir, "Sample_Annot_Filt.csv"), row.names = FALSE)
+```
+
+
+```{r session_info}
+xfun::session_info()
+```
