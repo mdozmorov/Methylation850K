@@ -1,0 +1,111 @@
+---
+title: "Analysis"
+author: "Mikhail Dozmorov"
+date: "`r Sys.Date()`"
+output:
+  pdf_document:
+    toc: no
+  html_document:
+    theme: cerulean
+    toc: yes
+---
+
+```{r setup, echo=FALSE, message=FALSE, warning=FALSE}
+# Set up the environment
+library(knitr)
+opts_chunk$set(cache.path='cache/', fig.path='img/', cache=F, tidy=T, fig.keep='high', echo=F, dpi=100, warnings=F, message=F, comment=NA, warning=F, results='as.is', fig.width = 10, fig.height = 6) #out.width=700, 
+library(pander)
+panderOptions('table.split.table', Inf)
+set.seed(1)
+library(dplyr)
+options(stringsAsFactors = FALSE)
+```
+
+```{r}
+library(readr)
+library(readxl)
+library(IlluminaHumanMethylationEPICanno.ilm10b2.hg19)
+library(ggplot2)
+library(reshape2)
+```
+
+```{r}
+# Mikhail's path
+data.dir           = "/Users/mdozmorov/Documents/Data/VCU_work/Lathika"
+fileNameOut2       = file.path(data.dir, "Methylation_bvalues.xlsx")
+```
+
+```{r}
+# Read methylation data
+mtx_expr <- read_xlsx(fileNameOut2, sheet = "bvalues") %>% as.data.frame()
+mtx_expr[1:5, 1:5]
+mtx_annot <- read_xlsx(fileNameOut2, sheet = "annotations") %>% as.data.frame()
+# Read in 850K annotation
+data("IlluminaHumanMethylationEPICanno.ilm10b2.hg19")
+data("Other")
+annot.cg <- data.frame(CpG = rownames(Other), Other)
+# Subset to common CpGs
+common.cg <- intersect(mtx_expr$CpG, annot.cg$CpG)
+mtx_expr <- mtx_expr[mtx_expr$CpG %in% common.cg, ]
+annot.cg <- annot.cg[annot.cg$CpG %in% common.cg, ]
+annot.cg <- annot.cg[match(mtx_expr$CpG, annot.cg$CpG), ]
+all.equal(mtx_expr$CpG, annot.cg$CpG)
+```
+
+# CpG
+
+## cpg_selected <- "cg01860693" # mean.diff =  0.20
+
+```{r}
+cpg_selected <- "cg01860693" # mean.diff =  0.20
+sum(mtx_expr$CpG == cpg_selected)
+mtx_to_plot <- data.frame(CpG = mtx_expr[mtx_expr$CpG == cpg_selected, !(colnames(mtx_expr) == "CpG")] %>% as.numeric(), Visit = mtx_annot$Visit)
+
+ggplot(mtx_to_plot, aes(x = Visit, y = CpG)) + geom_boxplot()
+```
+
+## cpg_selected <- "cg17798901" # mean.diff = -0.21
+
+```{r}
+cpg_selected <- "cg17798901" # mean.diff = -0.21
+sum(mtx_expr$CpG == cpg_selected)
+mtx_to_plot <- data.frame(CpG = mtx_expr[mtx_expr$CpG == cpg_selected, !(colnames(mtx_expr) == "CpG")] %>% as.numeric(), Visit = mtx_annot$Visit)
+
+ggplot(mtx_to_plot, aes(x = Visit, y = CpG)) + geom_boxplot()
+```
+
+# Gene
+
+## gene_selected <- "OR4D9" # mean.mean.diff =  0.10
+
+```{r}
+gene_selected <- "OR4D9" # mean.mean.diff =  0.10
+sum(grepl(gene_selected, annot.cg$UCSC_RefGene_Name))
+mtx_to_plot <- mtx_expr[mtx_expr$CpG %in% annot.cg$CpG[grepl(gene_selected, annot.cg$UCSC_RefGene_Name)], , drop = FALSE] %>% t # Get all CpG for the gene and transpose
+colnames(mtx_to_plot) <- mtx_to_plot[1, ] # Make CpG IDs as colnames
+mtx_to_plot <- mtx_to_plot[2:nrow(mtx_to_plot), ] # Remove row with colnames
+mtx_to_plot <- data.frame(mtx_to_plot, Visit = mtx_annot$Visit) # Add visit column
+mtx_to_plot <- melt(mtx_to_plot, id.vars = "Visit") # Long format
+colnames(mtx_to_plot) <- c("Visit", "CpG", "Methylation")
+mtx_to_plot$Methylation <- as.numeric(mtx_to_plot$Methylation)
+
+ggplot(mtx_to_plot, aes(x = Visit, y = Methylation)) + geom_boxplot() + facet_grid(. ~ CpG)
+```
+
+## gene_selected <- "FASLG" # mean.mean.diff = -0.10
+
+```{r}
+gene_selected <- "FASLG" # mean.mean.diff = -0.10
+sum(grepl(gene_selected, annot.cg$UCSC_RefGene_Name))
+mtx_to_plot <- mtx_expr[mtx_expr$CpG %in% annot.cg$CpG[grepl(gene_selected, annot.cg$UCSC_RefGene_Name)], , drop = FALSE] %>% t # Get all CpG for the gene and transpose
+colnames(mtx_to_plot) <- mtx_to_plot[1, ] # Make CpG IDs as colnames
+mtx_to_plot <- mtx_to_plot[2:nrow(mtx_to_plot), ] # Remove row with colnames
+mtx_to_plot <- data.frame(mtx_to_plot, Visit = mtx_annot$Visit) # Add visit column
+mtx_to_plot <- melt(mtx_to_plot, id.vars = "Visit") # Long format
+colnames(mtx_to_plot) <- c("Visit", "CpG", "Methylation")
+mtx_to_plot$Methylation <- as.numeric(mtx_to_plot$Methylation)
+
+ggplot(mtx_to_plot, aes(x = Visit, y = Methylation)) + geom_boxplot() + facet_grid(. ~ CpG)
+```
+
+

@@ -1,6 +1,6 @@
 ---
 title: "Annotation Setup"
-author: "Lucas Rizkalla"
+author: "Lucas Rizkalla, Mikhail Dozmorov"
 date: "`r Sys.Date()`"
 output:
   html_document:

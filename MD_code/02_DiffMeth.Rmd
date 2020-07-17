@@ -194,9 +194,3 @@ write_xlsx(x, path = fileNameOut2)
 
 
 
-```{r eval=FALSE}
-library(ggplot2)
-mtx_to_plot <- data.frame(CpG = meth(rnb.set.norm)[rownames(rnb.set.norm@sites) == "cg17968322"], Visit = as.character(rnb.set.norm@pheno$Visit))
-ggplot(mtx_to_plot, aes(x = Visit, y = CpG)) + geom_boxplot()
-```
-
