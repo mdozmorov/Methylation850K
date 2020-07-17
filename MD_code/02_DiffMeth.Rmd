@@ -1,0 +1,202 @@
+---
+title: "Differential Methylation"
+author: "Lucas Rizkalla, Mikhail Dozmorov"
+date: "`r Sys.Date()`"
+output:
+  pdf_document:
+    toc: no
+  html_document:
+    theme: cerulean
+    toc: yes
+---
+
+```{r setup, echo=FALSE, message=FALSE, warning=FALSE}
+# Set up the environment
+library(knitr)
+opts_chunk$set(cache.path='cache/', fig.path='img/', cache=F, tidy=T, fig.keep='high', echo=F, dpi=100, warnings=F, message=F, comment=NA, warning=F, results='as.is', fig.width = 10, fig.height = 6) #out.width=700, 
+library(pander)
+panderOptions('table.split.table', Inf)
+set.seed(1)
+library(dplyr)
+options(stringsAsFactors = FALSE)
+```
+
+```{r libraries}
+library(RnBeads)
+library(writexl)
+library(foreach)
+library(doParallel)
+library(annotables)
+```
+
+```{r settings}
+# Lucas's path
+# data.dir           = "/Users/lucasrizkalla/Desktop/Methylation Research-VCU/Methylation850K/data"
+# Mikhail's path
+data.dir           = "/Users/mdozmorov/Documents/Data/VCU_work/Lathika"
+runImport   = TRUE
+runDiffMeth = TRUE
+idat.dir           = file.path(data.dir, "idats_full")
+sample.annot.abrev = file.path(data.dir, "idats_full/Sample_Sheet.csv" )
+fileNameOut1       = file.path(data.dir, "Differential_Methylation.xlsx")
+fileNameOut2       = file.path(data.dir, "Methylation_bvalues.xlsx")
+```
+
+```{r}
+# Prepate gene annotations, remove non-canonical chromosome names
+gene_annotations <- grch38[ !(grepl("_", grch38$chr) | grepl("GL", grch38$chr)), c("ensgene", "symbol", "biotype", "description")]
+gene_annotations <- gene_annotations[ !duplicated(gene_annotations) & !is.na(gene_annotations$symbol) & gene_annotations$description != "", ]
+```
+
+
+# Set up parallel processing
+
+```{r}
+parallel.setup(cores = 15)
+```
+
+# Data Import, QC, Preprocessing, and Norm
+
+```{r}
+filename = file.path(data.dir, "preprocessed_data.RData")
+
+
+if (runImport) {
+  logger.start(fname=NA)
+  data.source <- c(idat.dir, sample.annot.abrev)
+  rnb.set <- rnb.execute.import(data.source=data.source, data.type="idat.dir")
+
+  report.dir = file.path(data.dir, "Report")
+  unlink(report.dir, recursive = TRUE) # Delete previous report, if exists, otherwise error
+  rnb.run.qc(rnb.set, report.dir)
+  
+  rnb.options(normalization.method = "swan", normalization.background.method = "enmix.oob")
+  result <- rnb.run.preprocessing(rnb.set, dir.reports=report.dir)
+  rnb.set.norm <- result$rnb.set
+  save(list = c("rnb.set.norm"), file = filename)
+} else {
+  load(file = filename)
+}
+```
+
+# Pairwise Analysis
+
+```{r}
+# rnb.set.norm@pheno <- rnb.set.norm@pheno[, c("Sentrix_ID", "Sentrix_Position", "barcode", "ID", "Visit", "Age", "Race")]
+# table(rnb.set.norm@pheno$Race) # Singletons
+# rnb.set.norm@pheno$Race[!grepl("African|White", rnb.set.norm@pheno$Race, perl = TRUE)] <- "Other"
+# table(rnb.set.norm@pheno$Race)
+
+rnb.set.norm@pheno$Visit <- factor(rnb.set.norm@pheno$Visit, levels = c("B", "A"))
+rnb.options(differential.comparison.columns = c("Visit"), columns.pairing = c("Visit" = "ID"))
+rnb.options(covariate.adjustment.columns = NULL)
+filename1 = file.path(data.dir, "diffMeth_data.RData")
+
+if (runDiffMeth) {
+  diffMeth <- rnb.execute.computeDiffMeth(rnb.set.norm, pheno.cols = "Visit")
+  save(list = c("diffMeth"), file = filename1)
+} else {
+  load(file = filename1)
+}
+```
+
+# Output of Annotated Results
+
+```{r}
+comparison <- get.comparisons(diffMeth)[1]
+  
+diff.meth.sites <- get.table(diffMeth, comparison, "sites", return.data.frame = TRUE)
+diff.meth.proms <- get.table(diffMeth, comparison, "promoters", return.data.frame = TRUE)
+diff.meth.genes <- get.table(diffMeth, comparison, "genes", return.data.frame = TRUE)
+diff.meth.cpgs  <- get.table(diffMeth, comparison, "cpgislands", return.data.frame = TRUE)
+
+sites.annot     <- annotation(rnb.set.norm, type="sites")
+promoter.annot  <- annotation(rnb.set.norm, type="promoters")
+genes.annot     <- annotation(rnb.set.norm, type ="genes")
+cpgisland.annot <- annotation(rnb.set.norm, type="cpgislands")
+
+annotated.diff.meth.sites <- data.frame(sites.annot, diff.meth.sites)
+annotated.diff.meth.proms <- data.frame(promoter.annot, diff.meth.proms)
+annotated.diff.meth.genes <- data.frame(genes.annot, diff.meth.genes)
+annotated.diff.meth.cpgs  <- data.frame(cpgisland.annot, diff.meth.cpgs)
+
+p_adj_cutoff <- 0.01
+nrow(annotated.diff.meth.sites[annotated.diff.meth.sites$diffmeth.p.adj.fdr < p_adj_cutoff, ])
+nrow(annotated.diff.meth.proms[annotated.diff.meth.proms$comb.p.adj.fdr < p_adj_cutoff, ])
+nrow(annotated.diff.meth.cpgs[annotated.diff.meth.cpgs$comb.p.adj.fdr < p_adj_cutoff, ])
+nrow(annotated.diff.meth.genes[annotated.diff.meth.genes$comb.p.adj.fdr < p_adj_cutoff, ])
+
+# All significant sites
+de.sites <- annotated.diff.meth.sites[annotated.diff.meth.sites$diffmeth.p.adj.fdr < p_adj_cutoff, ]
+de.sites <- data.frame(CpG = rownames(de.sites), de.sites)
+de.sites <- de.sites[order(de.sites$diffmeth.p.val), ]
+
+# All significant islands
+de.islands <- annotated.diff.meth.cpgs[annotated.diff.meth.cpgs$comb.p.val < p_adj_cutoff, ]
+de.islands <- de.islands[order(de.islands$comb.p.val), ]
+
+# All significant promoters
+de.promoters <- annotated.diff.meth.proms[annotated.diff.meth.proms$comb.p.adj.fdr < p_adj_cutoff, ]
+# Append annotations
+de.promoters <- data.frame(ensgene = rownames(de.promoters), de.promoters)
+de.promoters <- left_join(de.promoters, gene_annotations, by = c("ensgene"))
+# Order by most significant
+de.promoters <- de.promoters[order(de.promoters$comb.p.val), ]
+# Select protein-coding only
+de.promoters.coding <- de.promoters[de.promoters$biotype == "protein_coding" & !is.na(de.promoters$biotype), ]
+# Select protein-coding upregulated, sorted by largest difference
+de.promoters.coding.up <- de.promoters.coding[de.promoters.coding$mean.mean.diff > 0, ]
+de.promoters.coding.up <- de.promoters.coding.up[order(abs(de.promoters.coding.up$mean.mean.diff), decreasing = TRUE), ]
+# Select protein-coding upregulated, sorted by largest difference
+de.promoters.coding.dn <- de.promoters.coding[de.promoters.coding$mean.mean.diff < 0, ]
+de.promoters.coding.dn <- de.promoters.coding.dn[order(abs(de.promoters.coding.dn$mean.mean.diff), decreasing = TRUE), ]
+
+# All significant DEGs 
+de.genes <- annotated.diff.meth.genes[annotated.diff.meth.genes$comb.p.adj.fdr < p_adj_cutoff, ]
+# Append annotations
+de.genes <- data.frame(ensgene = rownames(de.genes), de.genes)
+de.genes <- left_join(de.genes, gene_annotations, by = c("ensgene"))
+# Order by most significant
+de.genes <- de.genes[order(de.genes$comb.p.val), ]
+# Select protein-coding only
+de.genes.coding <- de.genes[de.genes$biotype == "protein_coding" & !is.na(de.genes$biotype), ]
+# Select protein-coding upregulated, sorted by largest difference
+de.genes.coding.up <- de.genes.coding[de.genes.coding$mean.mean.diff > 0, ]
+de.genes.coding.up <- de.genes.coding.up[order(abs(de.genes.coding.up$mean.mean.diff), decreasing = TRUE), ]
+# Select protein-coding upregulated, sorted by largest difference
+de.genes.coding.dn <- de.genes.coding[de.genes.coding$mean.mean.diff < 0, ]
+de.genes.coding.dn <- de.genes.coding.dn[order(abs(de.genes.coding.dn$mean.mean.diff), decreasing = TRUE), ]
+
+# Save all results
+# Note the full results make ~200Mb xlsx
+x <- list(de.genes, de.genes.coding, de.genes.coding.up, de.genes.coding.dn,
+          de.promoters, de.promoters.coding, de.promoters.coding.up, de.promoters.coding.dn,
+          de.sites, de.islands)
+names(x) <- c("DEGs", "DEGs.coding", "DEGs.coding.up", "DEGs.coding.dn",
+              "Promoters", "Promoters.coding", "Promoters.coding.up", "Promoters.coding.dn",
+              "CpGs", "Islands")
+unlink(fileNameOut1)
+write_xlsx(x, path = fileNameOut1)
+```
+
+# Save methylation beta values
+
+```{r}
+annotations <- pheno(rnb.set.norm)
+bvalues <- meth(rnb.set.norm, row.names = TRUE)
+colnames(bvalues) <- annotations$ID
+bvalues <- data.frame(CpG = rownames(bvalues), bvalues)
+x <- list(bvalues, annotations)
+names(x) <- c("bvalues", "annotations")
+unlink(fileNameOut2)
+write_xlsx(x, path = fileNameOut2)
+```
+
+
+
+```{r eval=FALSE}
+library(ggplot2)
+mtx_to_plot <- data.frame(CpG = meth(rnb.set.norm)[rownames(rnb.set.norm@sites) == "cg17968322"], Visit = as.character(rnb.set.norm@pheno$Visit))
+ggplot(mtx_to_plot, aes(x = Visit, y = CpG)) + geom_boxplot()
+```
+
