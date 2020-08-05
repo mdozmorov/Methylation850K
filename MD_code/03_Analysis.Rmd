@@ -34,7 +34,8 @@ library(DOSE)
 # Mikhail's path
 data.dir           = "/Users/mdozmorov/Documents/Data/VCU_work/Lathika"
 fileNameIn1        = file.path(data.dir, "Differential_Methylation.xlsx")
-fileNameOut1       = file.path(data.dir, "Enrichment.xlsx")
+fileSheet          = "Promoters.coding.dn" # "DEGs.coding"
+fileNameOut1       = file.path(data.dir, paste0("Enrichment_", fileSheet, ".xlsx") )
 
 # Which pathway enrichment analysis to run
 run_gsea <- FALSE # If TRUE, GSEA pathway enrichment analysis is run, otherwise, standard hypergeometric-based enrichment
@@ -76,7 +77,7 @@ all.symbol <- unique(gene_annotations$symbol)
 # Load data
 
 ```{r}
-mtx <- read_xlsx(fileNameIn1, sheet = "DEGs.coding")
+mtx <- read_xlsx(fileNameIn1, sheet = fileSheet)
 res <- data.frame(symbol = mtx$symbol.y, logFC = mtx$mean.mean.diff, p.adj = mtx$comb.p.adj.fdr)
 ```
 
