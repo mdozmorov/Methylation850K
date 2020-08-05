@@ -108,4 +108,21 @@ mtx_to_plot$Methylation <- as.numeric(mtx_to_plot$Methylation)
 ggplot(mtx_to_plot, aes(x = Visit, y = Methylation)) + geom_boxplot() + facet_grid(. ~ CpG)
 ```
 
+# Overlap between gene lists
+
+
+```{r}
+library(Vennerable)
+data.dir           = "/Users/mdozmorov/Documents/Data/VCU_work/Lathika"
+fileNameIn1        = file.path(data.dir, "Differential_Methylation.xlsx")
+fileSheet1          = "DEGs.coding"
+fileSheet2          = "Promoters.coding" # "DEGs.coding"
+
+set1 <- read_xlsx(fileNameIn1, sheet = fileSheet1)
+set1 <- set1$symbol.y %>% unique()
+set2 <- read_xlsx(fileNameIn1, sheet = fileSheet2)
+set2 <- set2$symbol.y %>% unique()
+
+Venn(list(set1, set2), SetNames = c("DEGs", "Promoters")) %>% plot
+```
 
