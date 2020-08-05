@@ -1,0 +1,101 @@
+---
+title: "Pathview analysis"
+author: "Mikhail Dozmorov"
+date: "`r Sys.Date()`"
+output:
+  pdf_document:
+    toc: no
+  html_document:
+    theme: cerulean
+    toc: yes
+---
+
+```{r setup, echo=FALSE, message=FALSE, warning=FALSE}
+# Set up the environment
+library(knitr)
+opts_chunk$set(cache.path='cache/', fig.path='img/', cache=F, tidy=T, fig.keep='high', echo=F, dpi=100, warnings=F, message=F, comment=NA, warning=F, results='as.is', fig.width = 10, fig.height = 6) #out.width=700, 
+library(pander)
+panderOptions('table.split.table', Inf)
+set.seed(1)
+library(dplyr)
+options(stringsAsFactors = FALSE)
+```
+
+```{r libraries}
+library(pathview)
+library(openxlsx)
+library(readxl)
+library(KEGG.db)
+```
+
+```{r settings}
+# Data
+data.dir           = "/Users/mdozmorov/Documents/Data/VCU_work/Lathika"
+fileName_rna       = file.path(data.dir, "Enrichment_Promoters.coding.xlsx")
+
+fileNameIn1        = file.path(data.dir, "Differential_Methylation.xlsx")
+fileSheet          = "Promoters.coding" # "DEGs.coding"
+
+degs_sheet     <- "Promoters.coding" # Which worksheet contains differentially expressed genes
+kegg_sheet     <- "GSEA.KEGG" # Which worksheet contains KEGG pathways
+n_pathways     <- 20 # How many pathways to output
+out.suffix     <- "Protein.coding" # Suffix for pathways
+# Mutually exclusive selectors, which analysis should be run. Only one may be TRUE
+human_analysis <- TRUE
+mouse_analysis <- FALSE
+
+# Prepate gene annotations, remove non-canonical chromosome names
+if (human_analysis) {
+  library(org.Hs.eg.db)
+  OrgDb = "org.Hs.eg.db"; species = "hsa"
+}
+if (mouse_analysis) {
+  library(org.Mm.eg.db)
+  OrgDb = "org.Mm.eg.db"; species = "mmu"
+}
+```
+
+```{r}
+# Differentially expressed genes
+degs <- read_xlsx(fileNameIn1, sheet = degs_sheet)
+# Convert to EntrezID
+degs.eg <-clusterProfiler::bitr(degs$symbol.y, fromType = "SYMBOL", toType = "ENTREZID", OrgDb = OrgDb)
+degs <- left_join(degs, degs.eg, by = c("symbol.y" = "SYMBOL"))
+degs <- degs[!is.na(degs$ENTREZID), ]
+degs <- aggregate(x = degs$mean.mean.diff, by = list(degs$ENTREZID), FUN = mean )
+colnames(degs) <- c("ENTREZID", "logFC")
+# Construct vector of FCs
+degs.genes <- degs$logFC
+names(degs.genes) <- degs$ENTREZID
+
+# KEGG pathways
+kegg <- read_xlsx(fileName_rna, sheet = kegg_sheet) # All significant KEGG pathways
+kegg_names <- kegg$Description[1:min(n_pathways, nrow(kegg))] # Text names
+# kegg_names <- sub("hsa", "", kegg_names)
+xx <- as.data.frame(KEGGPATHNAME2ID) # Text to ID mapping
+setdiff(kegg_names, xx$path_name) # Names that did not map
+kegg_unmapped <- c("04658", "05235", "04061", "05418") # Manually map unmapped ones
+kegg_ids <- c(xx$path_id[xx$path_name %in% kegg_names], kegg_unmapped) # All KEGG IDs
+
+i <- 1 # Counter
+# Cycle through each KEGG ID
+for (keggid in kegg_ids) {
+  print(keggid)
+  # Get KEGG pathway and overlay DEGs
+  pv.out <- pathview(gene.data = degs.genes, pathway.id = as.character(keggid), species = species, gene.idtype = "ENTREZ", gene.annotpkg = OrgDb, out.suffix = out.suffix)
+  # Rename PNG file
+  fileNamePngIn  <- paste0(species, keggid, ".", out.suffix, ".png")
+  fileNamePngOut <- paste0(formatC(i, format="g", digits=2, flag = "0"), ".", "hsa", keggid, ".", out.suffix, ".png")
+  system(paste0("mv ", fileNamePngIn, " ", fileNamePngOut))
+  i <- i + 1 # Increase counter
+  system(paste0("rm ", species, keggid, ".*")) # Clean up temporary files
+}
+# brew install imagemagick
+system(paste0("convert *.png ", "pathways_", out.suffix, ".pdf")) # Combine PNGs into one PDF
+system(paste0("rm *.png")) 
+```
+
+
+```{r session_info}
+xfun::session_info()
+```

@@ -36,6 +36,8 @@ The `Methylation_bvalues.xlsx` file has methylation beta values, cpgIDs x sample
 
 - `04_Heatmap.Rmd` - visualization code
 
+- `05_Pathview.Rmd` - Visualize pathways
+
 - `Methods.Rmd` - Illumina EPIC 850K analysis methods
 
 - `Methylation_full.Rmd` - Old methylation analysis code
