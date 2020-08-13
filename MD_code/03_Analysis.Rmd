@@ -151,6 +151,7 @@ res <- data.frame(symbol = mtx$symbol.y, logFC = mtx$mean.mean.diff, p.adj = mtx
       if(nrow(res.kegg[[KEGG]]) > 0 & sum(res.kegg[[KEGG]]$Adjusted.P.value < p_adj_cutoff) > 0) {
         res.kegg <- as.data.frame(res.kegg[[KEGG]])
         res.kegg <- res.kegg[res.kegg$Adjusted.P.value < p_adj_cutoff, , drop = FALSE]
+        res.kegg <- res.kegg[order(res.kegg$P.value), ]
       }
     }
   }
@@ -186,11 +187,11 @@ res <- data.frame(symbol = mtx$symbol.y, logFC = mtx$mean.mean.diff, p.adj = mtx
   res.kegg.gsea <- as.data.frame(ego3)
   # Prepare for table output
   res.kegg.gsea <- res.kegg.gsea[, c("ID", "Description", "NES", "pvalue", "p.adjust", "core_enrichment")]
-  res.kegg.gsea <- res.kegg.gsea[order(abs(res.kegg.gsea$NES), decreasing = TRUE), ]
+  res.kegg.gsea <- res.kegg.gsea[order(res.kegg.gsea$pvalue), ]
   res.kegg.gsea <- res.kegg.gsea[res.kegg.gsea$p.adjust < p_adj_cutoff, ]
-  res.kegg.gsea$NES       <- round(res.kegg.gsea$NES, digits = 2)
-  res.kegg.gsea$pvalue    <- formatC(res.kegg.gsea$pvalue, format = "e", digits = 2)
-  res.kegg.gsea$p.adjust  <- formatC(res.kegg.gsea$p.adjust, format = "e", digits = 2)
+  # res.kegg.gsea$NES       <- round(res.kegg.gsea$NES, digits = 2)
+  # res.kegg.gsea$pvalue    <- formatC(res.kegg.gsea$pvalue, format = "e", digits = 2)
+  # res.kegg.gsea$p.adjust  <- formatC(res.kegg.gsea$p.adjust, format = "e", digits = 2)
   rownames(res.kegg.gsea) <- NULL
 ```
 
@@ -205,12 +206,18 @@ m_df_gs_cat <- unique(m_df$gs_cat) %>% sort()
 res.msigdf.all <- list()
 for (gs_cat in m_df_gs_cat) {
   m_t2g <- msigdbr(species = "Homo sapiens", category = gs_cat) %>% dplyr::select(gs_name, entrez_gene)
+  # Enrichment
   em <- enricher(names(geneList), TERM2GENE=m_t2g)
   res.msigdf.em <-em@result
-  res.msigdf.em <- res.msigdf.em[res.msigdf.em$p.adjust < p_adj_cutoff, ]
+  res.msigdf.em <- res.msigdf.em[res.msigdf.em$p.adjust < p_adj_cutoff, , drop = FALSE]
+  # GSEA
   em2 <- GSEA(geneList, TERM2GENE = m_t2g)
   res.msigdf.em2 <-em2@result
-  res.msigdf.em2 <- res.msigdf.em2[res.msigdf.em2$p.adjust < p_adj_cutoff, ]
+  res.msigdf.em2 <- res.msigdf.em2[res.msigdf.em2$p.adjust < p_adj_cutoff, , drop = FALSE]
+  # Sort
+  res.msigdf.em <- res.msigdf.em[order(res.msigdf.em$pvalue), , drop = FALSE]
+  res.msigdf.em2 <- res.msigdf.em2[order(res.msigdf.em2$pvalue), , drop = FALSE]
+  # Combine
   res.msigdf.all <- c(res.msigdf.all, list(res.msigdf.em), list(res.msigdf.em2))
   names(res.msigdf.all)[length(res.msigdf.all) - 1] <- paste0("Enrich.", gs_cat)
   names(res.msigdf.all)[length(res.msigdf.all) - 0] <- paste0("GSEA.", gs_cat)
